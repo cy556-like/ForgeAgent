@@ -302,10 +302,15 @@ def search_documents(query: str, top_k: int = 3, agent_id: str = None) -> list[d
     """
     # 1. 向量语义检索（按 agent_id 隔离）
     vector_store = get_vector_store(agent_id=agent_id)
+    vector_results_raw = []
     try:
         vector_results_raw = vector_store.similarity_search_with_score(query, k=top_k * 3)  # 多取用于融合
     except Exception as e:
+        error_str = str(e)
         logger.warning(f"向量检索失败，回退到关键词检索: {e}")
+        # 如果是429余额不足错误，记录更详细的提示
+        if '429' in error_str or '余额' in error_str or '1113' in error_str:
+            logger.warning(f"Embedding API 余额不足（429），向量检索不可用。建议：1）充值智谱API余额 2）或更换embedding模型。当前仅使用关键词检索。")
         vector_results_raw = []
 
     vector_results = []
@@ -340,6 +345,57 @@ def search_documents(query: str, top_k: int = 3, agent_id: str = None) -> list[d
     return formatted
 
 
+def get_document_content(filename: str, agent_id: str = None) -> dict:
+    """获取知识库中指定文档的完整内容（从磁盘原始文件读取，不依赖向量搜索）
+    
+    与 search_documents 不同，此函数返回文档的完整文本内容，
+    而不是分块后的片段。用于文档修改前获取完整内容。
+    
+    Args:
+        filename: 文档文件名（含扩展名）
+        agent_id: 智能体ID（用于验证文档归属，不参与向量搜索）
+    
+    Returns:
+        dict: 包含文档完整内容、状态信息
+    """
+    file_path = os.path.join(settings.DOCUMENTS_DIR, filename)
+    
+    if not os.path.exists(file_path):
+        return {
+            "filename": filename,
+            "status": "not_found",
+            "content": "",
+            "message": f"文档 {filename} 在服务器上未找到",
+        }
+    
+    try:
+        docs = load_document(file_path)
+        full_content = "\n".join([doc.page_content for doc in docs])
+        
+        if not full_content.strip():
+            return {
+                "filename": filename,
+                "status": "empty",
+                "content": "",
+                "message": f"文档 {filename} 内容为空",
+            }
+        
+        return {
+            "filename": filename,
+            "status": "success",
+            "content": full_content,
+            "char_count": len(full_content),
+            "message": f"成功获取文档 {filename} 的完整内容（共 {len(full_content)} 字符）",
+        }
+    except Exception as e:
+        return {
+            "filename": filename,
+            "status": "error",
+            "content": "",
+            "message": f"读取文档失败: {str(e)}",
+        }
+
+
 def list_indexed_documents(agent_id: str = None) -> list[str]:
     """列出知识库中所有已索引的文档（按 agent_id 隔离）"""
     vector_store = get_vector_store(agent_id=agent_id)
@@ -356,7 +412,7 @@ def list_indexed_documents(agent_id: str = None) -> list[str]:
         return []
 
 
-def update_document(filename: str, new_content: str, agent_id: str = None) -> dict:
+def update_document(filename: str, new_content: str, agent_id: str = None, async_reindex: bool = False) -> dict:
     """
     修改知识库中已有文档的内容
     流程：删除旧的向量分块 → 用新内容覆盖原文件 → 重新索引
@@ -364,6 +420,8 @@ def update_document(filename: str, new_content: str, agent_id: str = None) -> di
     Args:
         filename: 要修改的文档文件名
         new_content: 新的文档内容（纯文本）
+        agent_id: 智能体ID
+        async_reindex: 是否异步重索引（True=立即返回文件已修改，后台执行重索引，大幅加速响应）
 
     Returns:
         dict: 包含修改状态和详细信息
@@ -433,23 +491,45 @@ def update_document(filename: str, new_content: str, agent_id: str = None) -> di
         }
 
     # 4. 重新索引
-    try:
-        index_result = index_document(file_path, filename, agent_id=agent_id)
-    except Exception as e:
+    if async_reindex:
+        # 异步重索引：在后台线程执行，立即返回文件已修改的响应
+        import threading
+        def _background_reindex(fp, fn, aid):
+            try:
+                index_result = index_document(fp, fn, agent_id=aid)
+                logger.info(f"后台重索引完成: {fn}, {index_result.get('chunks', 0)} 个分块")
+            except Exception as e:
+                logger.error(f"后台重索引失败: {fn}, {e}")
+
+        thread = threading.Thread(target=_background_reindex, args=(file_path, filename, agent_id), daemon=True)
+        thread.start()
+
         return {
             "filename": filename,
-            "status": "error",
-            "message": f"重新索引失败: {str(e)}",
+            "status": "success",
             "chunks_deleted": chunks_deleted,
+            "chunks_indexed": "后台索引中",
+            "message": f"文档 {filename} 已成功修改（删除 {chunks_deleted} 个旧分块，新内容正在后台索引中）",
         }
+    else:
+        # 同步重索引：等待完成后再返回
+        try:
+            index_result = index_document(file_path, filename, agent_id=agent_id)
+        except Exception as e:
+            return {
+                "filename": filename,
+                "status": "error",
+                "message": f"重新索引失败: {str(e)}",
+                "chunks_deleted": chunks_deleted,
+            }
 
-    return {
-        "filename": filename,
-        "status": "success",
-        "chunks_deleted": chunks_deleted,
-        "chunks_indexed": index_result.get("chunks", 0),
-        "message": f"文档 {filename} 已成功修改（删除 {chunks_deleted} 个旧分块，重新索引 {index_result.get('chunks', 0)} 个新分块）",
-    }
+        return {
+            "filename": filename,
+            "status": "success",
+            "chunks_deleted": chunks_deleted,
+            "chunks_indexed": index_result.get("chunks", 0),
+            "message": f"文档 {filename} 已成功修改（删除 {chunks_deleted} 个旧分块，重新索引 {index_result.get('chunks', 0)} 个新分块）",
+        }
 
 
 def delete_document(filename: str, agent_id: str = None) -> dict:
@@ -560,6 +640,131 @@ def delete_agent_collection(agent_id: str) -> dict:
     except Exception as e:
         print(f"[DEBUG-知识库] 删除智能体 collection 失败: {e}")
         return {"status": "error", "message": f"删除知识库失败: {str(e)}"}
+
+
+def export_document_as_docx(content: str, filename: str, title: str = "") -> dict:
+    """
+    将文本内容导出为 .docx 文件，保存到下载目录，供用户下载
+    
+    Args:
+        content: 文档内容（纯文本）
+        filename: 输出文件名（含扩展名）
+        title: 文档标题（可选，将作为文档第一行加粗显示）
+    
+    Returns:
+        dict: 包含导出状态和文件路径
+    """
+    try:
+        from docx import Document as DocxDocument
+        from docx.shared import Pt, Inches
+        from docx.enum.text import WD_ALIGN_PARAGRAPH
+    except ImportError:
+        # 回退方案：保存为 .txt
+        txt_filename = filename.rsplit('.', 1)[0] + '.txt'
+        file_path = os.path.join(settings.DOCUMENTS_DIR, txt_filename)
+        with open(file_path, "w", encoding="utf-8") as f:
+            if title:
+                f.write(f"{title}\n{'=' * len(title.encode('gbk', errors='replace'))}\n\n")
+            f.write(content)
+        return {
+            "status": "success",
+            "filename": txt_filename,
+            "file_path": file_path,
+            "message": f"文档已导出为 {txt_filename}（python-docx 未安装，回退为 txt 格式）",
+        }
+    
+    try:
+        file_path = os.path.join(settings.DOCUMENTS_DIR, filename)
+        doc = DocxDocument()
+        
+        # 设置默认字体
+        style = doc.styles['Normal']
+        font = style.font
+        font.name = '宋体'
+        font.size = Pt(11)
+        
+        # 添加标题
+        if title:
+            heading = doc.add_heading(title, level=1)
+            heading.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        else:
+            # 从文件名提取标题
+            doc_title = filename.rsplit('.', 1)[0].replace('_', ' ').replace('-', ' ')
+            heading = doc.add_heading(doc_title, level=1)
+            heading.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        
+        # 按段落写入内容
+        lines = content.split('\n')
+        for line in lines:
+            line_stripped = line.strip()
+            if not line_stripped:
+                # 空行保留为空段落
+                doc.add_paragraph('')
+                continue
+            
+            # 检测是否为Markdown标题格式
+            if line_stripped.startswith('# ') and not line_stripped.startswith('## '):
+                # 一级标题（跳过，因为已经有标题了）
+                text = line_stripped[2:].strip()
+                p = doc.add_heading(text, level=2)
+            elif line_stripped.startswith('## '):
+                text = line_stripped[3:].strip()
+                p = doc.add_heading(text, level=2)
+            elif line_stripped.startswith('### '):
+                text = line_stripped[4:].strip()
+                p = doc.add_heading(text, level=3)
+            elif line_stripped.startswith('#### '):
+                text = line_stripped[5:].strip()
+                p = doc.add_heading(text, level=4)
+            elif line_stripped.startswith('- ') or line_stripped.startswith('* '):
+                # 列表项
+                text = line_stripped[2:].strip()
+                # 简单处理Markdown粗体
+                text = _clean_markdown_formatting(text)
+                doc.add_paragraph(text, style='List Bullet')
+            elif line_stripped.startswith('|') and '|' in line_stripped[1:]:
+                # 表格行 - 收集连续的表格行
+                p = doc.add_paragraph(line_stripped)
+                p.style = doc.styles['Normal']
+            else:
+                # 普通段落
+                text = _clean_markdown_formatting(line_stripped)
+                doc.add_paragraph(text)
+        
+        doc.save(file_path)
+        
+        return {
+            "status": "success",
+            "filename": filename,
+            "file_path": file_path,
+            "message": f"文档已导出为 {filename}",
+        }
+    except Exception as e:
+        # 回退为txt
+        txt_filename = filename.rsplit('.', 1)[0] + '.txt'
+        file_path = os.path.join(settings.DOCUMENTS_DIR, txt_filename)
+        with open(file_path, "w", encoding="utf-8") as f:
+            if title:
+                f.write(f"{title}\n\n")
+            f.write(content)
+        return {
+            "status": "success",
+            "filename": txt_filename,
+            "file_path": file_path,
+            "message": f"文档已导出为 {txt_filename}（docx 生成失败: {str(e)}，回退为 txt 格式）",
+        }
+
+
+def _clean_markdown_formatting(text: str) -> str:
+    """清理Markdown格式标记，转为纯文本"""
+    import re
+    # 去掉粗体标记 **text** → text
+    text = re.sub(r'\*\*(.+?)\*\*', r'\1', text)
+    # 去掉斜体标记 *text* → text
+    text = re.sub(r'\*(.+?)\*', r'\1', text)
+    # 去掉行内代码 `code` → code
+    text = re.sub(r'`(.+?)`', r'\1', text)
+    return text
 
 
 def list_all_collections() -> list[dict]:

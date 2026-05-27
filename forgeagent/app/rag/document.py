@@ -302,10 +302,15 @@ def search_documents(query: str, top_k: int = 3, agent_id: str = None) -> list[d
     """
     # 1. 向量语义检索（按 agent_id 隔离）
     vector_store = get_vector_store(agent_id=agent_id)
+    vector_results_raw = []
     try:
         vector_results_raw = vector_store.similarity_search_with_score(query, k=top_k * 3)  # 多取用于融合
     except Exception as e:
+        error_str = str(e)
         logger.warning(f"向量检索失败，回退到关键词检索: {e}")
+        # 如果是429余额不足错误，记录更详细的提示
+        if '429' in error_str or '余额' in error_str or '1113' in error_str:
+            logger.warning(f"Embedding API 余额不足（429），向量检索不可用。建议：1）充值智谱API余额 2）或更换embedding模型。当前仅使用关键词检索。")
         vector_results_raw = []
 
     vector_results = []
@@ -338,6 +343,57 @@ def search_documents(query: str, top_k: int = 3, agent_id: str = None) -> list[d
         })
 
     return formatted
+
+
+def get_document_content(filename: str, agent_id: str = None) -> dict:
+    """获取知识库中指定文档的完整内容（从磁盘原始文件读取，不依赖向量搜索）
+    
+    与 search_documents 不同，此函数返回文档的完整文本内容，
+    而不是分块后的片段。用于文档修改前获取完整内容。
+    
+    Args:
+        filename: 文档文件名（含扩展名）
+        agent_id: 智能体ID（用于验证文档归属，不参与向量搜索）
+    
+    Returns:
+        dict: 包含文档完整内容、状态信息
+    """
+    file_path = os.path.join(settings.DOCUMENTS_DIR, filename)
+    
+    if not os.path.exists(file_path):
+        return {
+            "filename": filename,
+            "status": "not_found",
+            "content": "",
+            "message": f"文档 {filename} 在服务器上未找到",
+        }
+    
+    try:
+        docs = load_document(file_path)
+        full_content = "\n".join([doc.page_content for doc in docs])
+        
+        if not full_content.strip():
+            return {
+                "filename": filename,
+                "status": "empty",
+                "content": "",
+                "message": f"文档 {filename} 内容为空",
+            }
+        
+        return {
+            "filename": filename,
+            "status": "success",
+            "content": full_content,
+            "char_count": len(full_content),
+            "message": f"成功获取文档 {filename} 的完整内容（共 {len(full_content)} 字符）",
+        }
+    except Exception as e:
+        return {
+            "filename": filename,
+            "status": "error",
+            "content": "",
+            "message": f"读取文档失败: {str(e)}",
+        }
 
 
 def list_indexed_documents(agent_id: str = None) -> list[str]:

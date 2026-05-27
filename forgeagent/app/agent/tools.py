@@ -20,7 +20,7 @@ from functools import wraps
 from langchain_core.tools import tool
 
 from app.config import settings
-from app.rag.document import search_documents, index_document, list_indexed_documents, delete_document, update_document, export_document_as_docx
+from app.rag.document import search_documents, index_document, list_indexed_documents, delete_document, update_document, export_document_as_docx, get_document_content
 
 logger = logging.getLogger(__name__)
 
@@ -231,7 +231,14 @@ def search_documents_tool(query: str) -> str:
     # 按 agent_id 隔离知识库：智能体只搜索自己的知识库，普通Agent搜全局
     current_aid = get_current_agent_id()
     print(f"[DEBUG-搜索] query={query}, agent_id={current_aid}", flush=True)
-    results = search_documents(query, top_k=5, agent_id=current_aid)
+    
+    try:
+        results = search_documents(query, top_k=5, agent_id=current_aid)
+    except Exception as e:
+        error_str = str(e)
+        if '429' in error_str or '余额' in error_str or '1113' in error_str:
+            return f"【检索失败】Embedding API 余额不足（429错误），向量搜索不可用。建议用户充值智谱API余额。当前仅使用关键词检索，结果可能不完整。如需获取完整文档内容，请使用 get_document_content_tool 工具。"
+        return f"【检索失败】搜索出错: {error_str}"
 
     if not results:
         return f"【检索结果】未找到与查询相关的文档内容（当前搜索的知识库: agent_id={current_aid}）。建议：1）尝试换用不同关键词搜索；2）确认相关文档是否已上传至对应智能体的知识库。"
@@ -404,6 +411,37 @@ def upload_document_tool(file_path: str) -> str:
 
 
 @tool
+def get_document_content_tool(filename: str) -> str:
+    """获取知识库中指定文档的完整内容。直接从原始文件读取，不依赖向量搜索，不会消耗embedding额度。
+
+    【用途】当需要查看或获取某个文档的完整内容时使用。修改文档前应先用此工具获取完整内容。
+    【典型问题】「显示xxx文档的完整内容」「获取xxx文档全文」「查看xxx文档」
+    【与search_documents_tool的区别】
+    - search_documents_tool：搜索知识库，返回与查询相关的文档片段（500字/片），适合查找特定信息
+    - get_document_content_tool：返回指定文档的完整全文，适合需要整体查看或修改文档的场景
+    【重要】修改文档前，请先调用此工具获取完整内容，修改后再调用modify_document_tool保存。
+
+    Args:
+        filename: 文档文件名（含扩展名），需与知识库中的文件名完全一致。
+                  示例：「员工手册.pdf」「FMEA新版手册.docx」
+    """
+    current_aid = get_current_agent_id()
+    result = get_document_content(filename, agent_id=current_aid)
+    
+    if result["status"] == "not_found":
+        return f"【获取失败】文档 \"{filename}\" 在服务器上未找到。\n提示：请确认文件名是否正确（需包含扩展名），可通过 list_documents_tool 查看当前文档列表。"
+    if result["status"] == "empty":
+        return f"【获取失败】文档 \"{filename}\" 内容为空。"
+    if result["status"] == "error":
+        return f"【获取失败】{result['message']}"
+    
+    # 成功：返回完整内容
+    output = f"【文档内容】{filename}（共 {result['char_count']} 字符）\n\n"
+    output += result["content"]
+    return output
+
+
+@tool
 def delete_document_tool(filename: str) -> str:
     """从知识库中删除指定文档，同时移除其所有向量分块和原始文件。此操作不可恢复。
 
@@ -431,6 +469,8 @@ def modify_document_tool(filename: str, content: str, append: bool = False, retu
     【典型问题】「帮我在xxx文件中添加yyy」「把xxx文档里的zzz改成www」「修改知识库的xxx文件」
     【重要】修改后会自动重新索引到向量数据库，无需手动操作。
     【导出文档】当用户要求返回修改后的docx文件时，设置return_docx=True，系统会生成docx文件供下载。
+    【操作流程】替换模式下，请先调用 get_document_content_tool 获取完整内容，在完整内容基础上进行修改，
+    然后将修改后的完整内容作为 content 参数传入。不要凭记忆或片段拼凑内容！
 
     Args:
         filename: 要修改的文档文件名（含扩展名），需与知识库中的文件名完全一致。
@@ -785,6 +825,7 @@ BASE_TOOLS = [
     lookup_employee_tool,
     list_departments_tool,
     list_documents_tool,
+    get_document_content_tool,
     upload_document_tool,
     delete_document_tool,
     modify_document_tool,
