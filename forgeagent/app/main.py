@@ -241,6 +241,9 @@ if __name__ == "__main__":
     # 确保统计数据目录存在
     os.makedirs(settings.DATA_DIR, exist_ok=True)
 
+    # 确保智能体数据目录存在
+    os.makedirs(os.path.join(settings.DATA_DIR, "agents"), exist_ok=True)
+
     # 初始化日志
     logger = setup_logging()
 
