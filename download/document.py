@@ -520,3 +520,61 @@ def delete_document(filename: str, agent_id: str = None) -> dict:
         "status": "success",
         "message": f"文档 {filename} 已成功删除（{len(chunk_ids)} 个分块，原始文件{'已删除' if file_deleted else '不存在'}）",
     }
+
+
+def delete_agent_collection(agent_id: str) -> dict:
+    """删除智能体的整个知识库 collection
+    
+    删除智能体时调用，清理 ChromaDB 中该智能体专属的 collection。
+    同时清理缓存中的 vector_store 实例。
+    
+    Args:
+        agent_id: 智能体ID
+    
+    Returns:
+        dict: 包含删除状态和详细信息
+    """
+    if not agent_id:
+        return {"status": "error", "message": "agent_id 不能为空"}
+    
+    import chromadb
+    collection_name = _get_collection_name(agent_id)
+    
+    try:
+        client = chromadb.PersistentClient(path=settings.CHROMA_DIR)
+        # 先检查 collection 是否存在
+        existing_collections = [c.name for c in client.list_collections()]
+        if collection_name not in existing_collections:
+            return {"status": "success", "message": f"智能体知识库 {collection_name} 不存在，无需删除"}
+        
+        # 删除 collection
+        client.delete_collection(collection_name)
+        
+        # 清理缓存
+        cache_key = agent_id or "__global__"
+        if cache_key in _vector_store_cache:
+            del _vector_store_cache[cache_key]
+        
+        print(f"[DEBUG-知识库] 已删除智能体 collection: {collection_name}")
+        return {"status": "success", "message": f"智能体知识库 {collection_name} 已删除"}
+    except Exception as e:
+        print(f"[DEBUG-知识库] 删除智能体 collection 失败: {e}")
+        return {"status": "error", "message": f"删除知识库失败: {str(e)}"}
+
+
+def list_all_collections() -> list[dict]:
+    """列出 ChromaDB 中所有的 collection 及其文档数（诊断用）"""
+    import chromadb
+    try:
+        client = chromadb.PersistentClient(path=settings.CHROMA_DIR)
+        collections = client.list_collections()
+        result = []
+        for c in collections:
+            try:
+                count = c.count()
+            except:
+                count = -1
+            result.append({"name": c.name, "count": count})
+        return result
+    except Exception as e:
+        return [{"name": "error", "count": 0, "message": str(e)}]

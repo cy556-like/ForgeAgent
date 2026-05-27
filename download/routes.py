@@ -23,7 +23,7 @@ from fastapi.responses import StreamingResponse, Response
 from pydantic import BaseModel
 
 from app.agent.core import chat, chat_stream_generator, chat_stream_generator_multimodal, reset_agent
-from app.rag.document import index_document, search_documents, list_indexed_documents, delete_document, update_document
+from app.rag.document import index_document, search_documents, list_indexed_documents, delete_document, update_document, delete_agent_collection, list_all_collections, load_document
 from app.auth.user_manager import login_user, register_user
 from app.auth.jwt_handler import create_token, verify_token, get_username_from_token
 from app.memory.manager import (
@@ -277,6 +277,8 @@ async def chat_with_file_stream(
     web_search: bool = Form(False),
     mode: str = Form("agent"),
     deep_think: bool = Form(False),
+    agent_id: str = Form(None),
+    store_to_kb: str = Form("true"),
     username: str = Depends(get_current_user),
 ):
     """
@@ -342,16 +344,32 @@ async def chat_with_file_stream(
         )
 
     elif ext in doc_exts:
-        # 文档文件：索引到知识库后回答
+        # 文档文件
         file_path = os.path.join(settings.DOCUMENTS_DIR, file.filename)
         with open(file_path, "wb") as f:
             shutil.copyfileobj(file.file, f)
-        try:
-            index_result = index_document(file_path, file.filename)
-        except Exception as e:
-            os.remove(file_path)
-            raise HTTPException(status_code=500, detail=f"文档索引失败: {str(e)}")
-        full_message = f"[用户上传了文档: {file.filename}]\n\n{message}"
+        
+        if store_to_kb == "true":
+            # 知识库模式 ON：索引到知识库后回答
+            try:
+                # 空字符串转为 None
+                aid = agent_id if agent_id else None
+                index_result = index_document(file_path, file.filename, agent_id=aid)
+                print(f"[DEBUG-上传] 文件已索引到知识库: {file.filename}, agent_id={aid}, 分块数={index_result.get('chunks', 0)}")
+            except Exception as e:
+                os.remove(file_path)
+                raise HTTPException(status_code=500, detail=f"文档索引失败: {str(e)}")
+            full_message = f"[用户上传了文档: {file.filename}]\n\n{message}"
+        else:
+            # 知识库模式 OFF：只读取内容回答，不存入知识库
+            try:
+                docs = load_document(file_path)
+                text = "\n".join([doc.page_content for doc in docs])
+                full_message = f"[用户上传了文档: {file.filename}]\n\n文档内容：\n{text[:8000]}\n\n{message}"
+                print(f"[DEBUG-上传] 文件仅读取内容（不存知识库）: {file.filename}")
+            except Exception as e:
+                os.remove(file_path)
+                raise HTTPException(status_code=500, detail=f"文档读取失败: {str(e)}")
 
     elif ext in code_exts:
         # 代码/其他文本文件：读取内容传给LLM
@@ -366,7 +384,8 @@ async def chat_with_file_stream(
 
     # 流式回答
     async def event_generator():
-        async for chunk in chat_stream_generator(full_message, session_id, web_search=web_search, mode=mode, deep_think=deep_think):
+        aid = agent_id if agent_id else None
+        async for chunk in chat_stream_generator(full_message, session_id, web_search=web_search, mode=mode, deep_think=deep_think, agent_id=aid):
             yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
         try:
             parts = session_id.split("_", 1)
@@ -792,3 +811,86 @@ async def health_detailed():
         "checks": checks,
         "timestamp": time.time(),
     }
+
+
+# ===== 智能体知识库管理接口 =====
+
+@router.delete("/agents/{agent_id}/knowledge", summary="删除智能体的知识库")
+async def delete_agent_knowledge(agent_id: str):
+    """
+    删除智能体对应的整个 ChromaDB collection
+    在删除智能体时调用，确保知识库数据同步清理
+    """
+    if not agent_id:
+        raise HTTPException(status_code=400, detail="agent_id 不能为空")
+    result = delete_agent_collection(agent_id)
+    if result["status"] == "error":
+        raise HTTPException(status_code=500, detail=result["message"])
+    return {"status": "success", "detail": result}
+
+
+# ===== 诊断接口 =====
+
+@router.get("/debug/collections", summary="列出所有 ChromaDB collection")
+async def debug_collections():
+    """诊断接口：列出所有 ChromaDB collection 及其文档数"""
+    collections = list_all_collections()
+    return {"collections": collections}
+
+
+@router.get("/migrate/cleanup-collections", summary="清理异常的 ChromaDB collection")
+async def cleanup_collections():
+    """
+    清理空 collection 或有双重前缀的 collection
+    例如：agent_agent_xxx → 应该是 agent_xxx
+    """
+    import chromadb
+    client = chromadb.PersistentClient(path=settings.CHROMA_DIR)
+    collections = client.list_collections()
+    cleaned = []
+
+    for c in collections:
+        name = c.name
+        # 修复双重前缀：agent_agent_xxx → agent_xxx
+        if name.startswith("agent_agent_"):
+            correct_name = name.replace("agent_agent_", "agent_", 1)
+            try:
+                # 获取旧 collection 的数据
+                old_data = c.get(include=["documents", "metadatas", "embeddings"])
+                if old_data.get("ids"):
+                    # 创建正确名称的 collection 并迁移数据
+                    from app.rag.document import get_vector_store
+                    # 从 agent_agent_xxx 提取真正的 agent_id
+                    real_agent_id = name.replace("agent_", "", 1)  # 去掉第一个 agent_ 前缀
+                    new_vs = get_vector_store(agent_id=real_agent_id)
+                    # 迁移文档
+                    from langchain_core.documents import Document
+                    docs = []
+                    for i, doc_id in enumerate(old_data["ids"]):
+                        doc = Document(
+                            page_content=old_data["documents"][i] or "",
+                            metadata=old_data["metadatas"][i] or {},
+                        )
+                        docs.append(doc)
+                    if docs:
+                        new_vs.add_documents(docs)
+                    cleaned.append({"old": name, "new": correct_name, "migrated_docs": len(docs)})
+                # 删除旧 collection
+                client.delete_collection(name)
+            except Exception as e:
+                cleaned.append({"old": name, "error": str(e)})
+        # 清理空 collection（除了 langchain）
+        elif name != "langchain":
+            try:
+                count = c.count()
+                if count == 0:
+                    client.delete_collection(name)
+                    cleaned.append({"deleted_empty": name})
+            except:
+                pass
+
+    # 清理 vector_store 缓存
+    from app.rag.document import reset_vector_store
+    reset_vector_store()
+
+    return {"status": "success", "cleaned": cleaned}

@@ -70,13 +70,22 @@ async function createAgent() {
 function deleteAgent(agentId) {
     const agent = myAgents.find(a => a.id === agentId);
     if (!agent) return;
-    if (!confirm(`确定删除智能体「${agent.name}」？相关对话也将被删除。`)) return;
+    if (!confirm(`确定删除智能体「${agent.name}」？相关对话和知识库也将被删除。`)) return;
+    
+    // 先删除服务器端的知识库
+    fetch(`/api/v1/agents/${encodeURIComponent(agentId)}/knowledge`, { method: 'DELETE', headers: apiHeaders() })
+        .then(r => r.json())
+        .then(data => console.log('[KB删除]', data))
+        .catch(e => console.warn('[KB删除失败]', e));
     
     myAgents = myAgents.filter(a => a.id !== agentId);
     saveAgents();
     
     if (currentAgentId === agentId) {
         currentAgentId = null;
+        agentKbUploadMode = false;
+        document.getElementById('kbUploadToggle').classList.remove('active');
+        document.getElementById('agentKbBar').style.display = 'none';
         modeChatId['agent'] = null;
         document.getElementById('chatTitle').textContent = 'ForgeAgent';
         updateKbUploadVisibility();
@@ -1083,6 +1092,14 @@ async function sendMessage() {
         formData.append('web_search', webSearchEnabled);
         formData.append('mode', currentMode);
         formData.append('deep_think', deepThinkEnabled);
+        // 知识库模式：📚激活时文件存入知识库，未激活时仅用于回答
+        if (agentKbUploadMode && currentAgentId) {
+            formData.append('agent_id', currentAgentId);
+            formData.append('store_to_kb', 'true');
+        } else {
+            formData.append('agent_id', '');
+            formData.append('store_to_kb', 'false');
+        }
         await streamChat('/api/v1/chat-with-file/stream', { method: 'POST', body: formData, headers: authToken ? { 'Authorization': 'Bearer ' + authToken } : {} }, bubble);
         removeFile();
         await loadChatList();
@@ -1091,6 +1108,10 @@ async function sendMessage() {
         showTyping(true);
         const formData = new FormData();
         formData.append('file', selectedFile);
+        // 知识库模式：📚激活时文件存入智能体知识库
+        if (agentKbUploadMode && currentAgentId) {
+            formData.append('agent_id', currentAgentId);
+        }
         try {
             const resp = await fetch('/api/v1/upload', { method: 'POST', body: formData, headers: authToken ? { 'Authorization': 'Bearer ' + authToken } : {} });
             const data = await resp.json();
