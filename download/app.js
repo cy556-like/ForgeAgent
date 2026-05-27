@@ -157,11 +157,54 @@ function renderMyAgents() {
                 <div class="agent-item-task">${escapeHtml(agent.task)}</div>
             </div>
             <div class="agent-item-actions">
+                <button class="agent-action-btn edit" onclick="openAgentEditModal('${agent.id}')" title="修改" aria-label="修改智能体">✏️</button>
                 <button class="agent-action-btn delete" onclick="deleteAgent('${agent.id}')" title="删除" aria-label="删除智能体">🗑️</button>
             </div>
         `;
         list.appendChild(item);
     });
+}
+
+// ===== Agent Edit =====
+let editingAgentId = null;
+
+function openAgentEditModal(agentId) {
+    const agent = myAgents.find(a => a.id === agentId);
+    if (!agent) return;
+    editingAgentId = agentId;
+    document.getElementById('editAgentName').value = agent.name;
+    document.getElementById('editAgentTask').value = agent.task;
+    document.getElementById('agentEditModal').classList.add('show');
+    setTimeout(() => document.getElementById('editAgentName').focus(), 100);
+}
+
+function closeAgentEditModal() {
+    document.getElementById('agentEditModal').classList.remove('show');
+    editingAgentId = null;
+}
+
+async function saveAgentEdit() {
+    if (!editingAgentId) return;
+    const name = document.getElementById('editAgentName').value.trim();
+    const task = document.getElementById('editAgentTask').value.trim();
+    if (!name) { showToast('请输入智能体名称'); return; }
+    if (!task) { showToast('请输入任务描述'); return; }
+
+    const agent = myAgents.find(a => a.id === editingAgentId);
+    if (!agent) return;
+
+    agent.name = name;
+    agent.task = task;
+    saveAgents();
+
+    // 更新标题（如果正在编辑当前选中的智能体）
+    if (currentAgentId === editingAgentId) {
+        document.getElementById('chatTitle').textContent = name;
+    }
+
+    closeAgentEditModal();
+    renderMyAgents();
+    showToast(`智能体「${name}」已更新`);
 }
 
 function toggleMyAgents() {
@@ -1094,12 +1137,18 @@ async function sendMessage() {
         formData.append('web_search', webSearchEnabled);
         formData.append('mode', currentMode);
         formData.append('deep_think', deepThinkEnabled);
-        // 知识库模式：📚激活时文件存入知识库，未激活时仅用于回答
-        if (agentKbUploadMode && currentAgentId) {
+        // 智能体ID和任务描述
+        if (currentAgentId) {
             formData.append('agent_id', currentAgentId);
-            formData.append('store_to_kb', 'true');
+            const curAgent = myAgents.find(a => a.id === currentAgentId);
+            if (curAgent) formData.append('agent_task', curAgent.task);
         } else {
             formData.append('agent_id', '');
+        }
+        // 知识库模式：📚激活时文件存入知识库，未激活时仅用于回答
+        if (agentKbUploadMode && currentAgentId) {
+            formData.append('store_to_kb', 'true');
+        } else {
             formData.append('store_to_kb', 'false');
         }
         await streamChat('/api/v1/chat-with-file/stream', { method: 'POST', body: formData, headers: authToken ? { 'Authorization': 'Bearer ' + authToken } : {} }, bubble);

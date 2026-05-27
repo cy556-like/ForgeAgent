@@ -3169,9 +3169,14 @@ body {
     color: var(--error);
     background: rgba(239,68,68,0.08);
 }
+.agent-action-btn.edit:hover {
+    color: #2563EB;
+    background: rgba(37,99,235,0.08);
+}
 
 /* ===== Agent Create Modal ===== */
-#agentCreateModal {
+#agentCreateModal,
+#agentEditModal {
     display: none;
     position: fixed;
     top: 0; left: 0; right: 0; bottom: 0;
@@ -3181,7 +3186,8 @@ body {
     align-items: center;
     justify-content: center;
 }
-#agentCreateModal.show {
+#agentCreateModal.show,
+#agentEditModal.show {
     display: flex;
 }
 .agent-create-modal {

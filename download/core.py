@@ -202,19 +202,173 @@ def reset_agent():
     _agent_graph = None
 
 
-def chat(user_input: str, session_id: str = "default", web_search: bool = False, mode: str = "agent", deep_think: bool = False, agent_id: str = None) -> str:
+def _build_agent_prompt(agent_task: str, web_search: bool = False) -> str:
+    """根据智能体的任务描述构建专属系统提示词
+    
+    智能体的任务描述将作为角色定义的优先内容，
+    覆盖默认的「小智」角色，但保留工具使用指南和安全边界。
+    
+    Args:
+        agent_task: 智能体的任务描述（用户自定义的角色定义）
+        web_search: 是否启用联网搜索
+    
+    Returns:
+        str: 完整的系统提示词
+    """
+    base_prompt = SYSTEM_PROMPT_WITH_WEB_SEARCH if web_search else SYSTEM_PROMPT
+    
+    # 在系统提示词开头插入智能体专属角色定义
+    # 替换默认角色段落，保留工具选择指南、回答规则、安全边界等
+    custom_header = f"""# 角色
+
+{agent_task}
+
+## 身份
+- 你的角色由上述定义决定，请严格按照任务描述中的角色定位和行为规则来行动
+- 你的核心职责是完成上述任务描述中定义的工作
+- 语气与风格应与角色定位保持一致
+
+## 重要原则：不要拒绝合理请求
+在符合角色定位的前提下，用户提出的合理请求你应当尽力帮助。
+**绝对不要**说"这不属于我的服务范围"或"我无法帮你"这类话——只要你能做到，就给出回答。
+
+"""
+    
+    # 找到原始提示词中"## 工具选择指南"的位置，保留从那里开始的所有内容
+    tools_section_marker = "## 工具选择指南"
+    tools_idx = base_prompt.find(tools_section_marker)
+    
+    if tools_idx > 0:
+        # 保留工具选择指南及之后的内容
+        preserved_section = base_prompt[tools_idx:]
+        return custom_header + preserved_section
+    else:
+        # 如果找不到标记，就直接拼接
+        return custom_header + base_prompt
+
+
+def _build_chat_prompt(agent_task: str) -> str:
+    """根据智能体任务描述构建Chat模式的系统提示词
+    
+    Args:
+        agent_task: 智能体的任务描述
+    
+    Returns:
+        str: Chat模式系统提示词
+    """
+    return f"""{agent_task}
+
+## 核心原则
+- 严格按照上述角色定义来回答问题
+- 专业、简洁、友好，使用规范中文回答
+- 不拒绝合理的用户请求，尽力提供有价值的帮助
+- 回答要有深度和细节，不要过于简略
+- 适时使用结构化格式（编号、分段、表格）组织回答
+
+## 回答规则
+- 编程问题：给出完整代码，附上关键注释和运行说明
+- 知识问答：准确、详细地回答，必要时补充背景信息
+- 写作任务：根据需求撰写，保持风格一致
+- 翻译任务：准确翻译，保留原文的语气和风格
+- 闲聊：轻松自然地回应
+
+## 格式要求
+- 使用Markdown格式组织回答
+- 代码使用代码块，标注语言类型
+- 涉及流程时使用有序列表
+- 涉及对比时使用表格
+"""
+
+
+def get_agent_with_prompt(custom_system_prompt: str, web_search: bool = False):
+    """获取带有自定义系统提示词的 Agent 实例
+    
+    当智能体有自定义任务描述时，使用此函数创建 Agent，
+    而不是复用全局 Agent 实例（因为全局实例使用默认提示词）。
+    
+    Args:
+        custom_system_prompt: 自定义的系统提示词
+        web_search: 是否启用联网搜索工具
+    
+    Returns:
+        编译后的 LangGraph Agent
+    """
+    llm = create_llm()
+    tools = get_tools(web_search=web_search)
+    llm_with_tools = llm.bind_tools(tools)
+
+    def think(state: AgentState):
+        """LLM 思考：分析用户问题，决定是否调用工具"""
+        messages = state["messages"]
+        system_msg = SystemMessage(content=custom_system_prompt)
+        response = llm_with_tools.invoke([system_msg] + messages)
+        return {"messages": [response]}
+
+    tool_node = ToolNode(tools)
+
+    def should_continue(state: AgentState):
+        """判断是否需要继续调用工具"""
+        messages = state["messages"]
+        retry_count = state.get("retry_count", 0)
+        tool_message_count = sum(1 for m in messages if isinstance(m, ToolMessage))
+
+        if tool_message_count >= MAX_TOOL_ROUNDS:
+            logger.info(f"Agent 工具调用已达上限 {MAX_TOOL_ROUNDS} 轮，强制结束")
+            return END
+
+        last_message = messages[-1]
+        if hasattr(last_message, "tool_calls") and last_message.tool_calls:
+            if tool_message_count > 0:
+                for msg in reversed(messages):
+                    if isinstance(msg, ToolMessage):
+                        tool_result = msg.content if isinstance(msg.content, str) else str(msg.content)
+                        if any(err in tool_result for err in RETRYABLE_TOOL_ERRORS):
+                            if retry_count < MAX_TOOL_RETRIES:
+                                logger.info(f"Agent 检测到工具错误，第 {retry_count + 1} 次重试")
+                                return "act"
+                            else:
+                                logger.info(f"Agent 工具重试已达上限 {MAX_TOOL_RETRIES} 次，继续执行")
+                        break
+            return "act"
+        return END
+
+    graph = StateGraph(AgentState)
+    graph.add_node("think", think)
+    graph.add_node("act", tool_node)
+    graph.set_entry_point("think")
+    graph.add_conditional_edges(
+        "think",
+        should_continue,
+        {"act": "act", END: END},
+    )
+    graph.add_edge("act", "think")
+
+    return graph.compile()
+
+
+def chat(user_input: str, session_id: str = "default", web_search: bool = False, mode: str = "agent", deep_think: bool = False, agent_id: str = None, agent_task: str = None) -> str:
     """
     非流式对话（保留兼容）
     """
     # 设置当前智能体上下文（知识库隔离）
     set_current_agent_id(agent_id)
+    
+    # 构建系统提示词：如果智能体有自定义任务描述，优先使用
+    if agent_task:
+        custom_prompt = _build_agent_prompt(agent_task, web_search=web_search)
+    elif web_search:
+        custom_prompt = SYSTEM_PROMPT_WITH_WEB_SEARCH
+    else:
+        custom_prompt = SYSTEM_PROMPT
+    
     if mode == "chat":
         # Chat模式：直接LLM对话，不经过Agent
         llm = create_llm(deep_think=deep_think)
         history = get_session_history(session_id)
         recent_messages = history.messages[-MAX_HISTORY_MESSAGES:]
         all_messages = recent_messages + [HumanMessage(content=user_input)]
-        result = llm.invoke([SystemMessage(content=CHAT_SYSTEM_PROMPT)] + all_messages)
+        chat_prompt = _build_chat_prompt(agent_task) if agent_task else CHAT_SYSTEM_PROMPT
+        result = llm.invoke([SystemMessage(content=chat_prompt)] + all_messages)
         full_response = result.content
         history.add_message(HumanMessage(content=user_input))
         history.add_message(AIMessage(content=full_response))
@@ -261,7 +415,7 @@ TOOL_DISPLAY_NAMES = {
 }
 
 
-async def chat_stream_generator(user_input: str, session_id: str = "default", web_search: bool = False, mode: str = "agent", deep_think: bool = False, agent_id: str = None) -> AsyncGenerator[dict, None]:
+async def chat_stream_generator(user_input: str, session_id: str = "default", web_search: bool = False, mode: str = "agent", deep_think: bool = False, agent_id: str = None, agent_task: str = None) -> AsyncGenerator[dict, None]:
     """
     流式对话：逐token输出，同时显示工具调用进度
     Yields: {"type": "token"|"tool"|"thinking"|"done"|"error", ...}
@@ -274,12 +428,17 @@ async def chat_stream_generator(user_input: str, session_id: str = "default", we
     set_current_agent_id(agent_id)
     # Chat模式：直接LLM对话
     if mode == "chat":
-        async for chunk in _chat_mode_stream(user_input, session_id, deep_think=deep_think, web_search=web_search, agent_id=agent_id):
+        async for chunk in _chat_mode_stream(user_input, session_id, deep_think=deep_think, web_search=web_search, agent_id=agent_id, agent_task=agent_task):
             yield chunk
         return
 
     # Agent模式：走Agent工具调用
-    agent = get_agent(web_search=web_search)
+    # 如果智能体有自定义任务描述，构建专属提示词
+    if agent_task:
+        custom_system_prompt = _build_agent_prompt(agent_task, web_search=web_search)
+        agent = get_agent_with_prompt(custom_system_prompt, web_search=web_search)
+    else:
+        agent = get_agent(web_search=web_search)
     history = get_session_history(session_id)
     recent_messages = history.messages[-MAX_HISTORY_MESSAGES:]
     all_messages = recent_messages + [HumanMessage(content=user_input)]
@@ -375,10 +534,12 @@ async def chat_stream_generator(user_input: str, session_id: str = "default", we
     yield {"type": "done"}
 
 
-async def _chat_mode_stream(user_input: str, session_id: str = "default", deep_think: bool = False, web_search: bool = False, agent_id: str = None) -> AsyncGenerator[dict, None]:
+async def _chat_mode_stream(user_input: str, session_id: str = "default", deep_think: bool = False, web_search: bool = False, agent_id: str = None, agent_task: str = None) -> AsyncGenerator[dict, None]:
     """Chat模式：直接LLM流式对话，不经过Agent工具调用，可选联网搜索"""
     # Chat模式也设置智能体上下文
-    set_current_agent_id(agent_id)"
+    set_current_agent_id(agent_id)
+    # 构建系统提示词：有自定义任务描述时优先使用
+    chat_system_prompt = _build_chat_prompt(agent_task) if agent_task else CHAT_SYSTEM_PROMPT
     llm = create_llm(deep_think=deep_think)
     history = get_session_history(session_id)
     recent_messages = history.messages[-MAX_HISTORY_MESSAGES:]
@@ -413,7 +574,7 @@ async def _chat_mode_stream(user_input: str, session_id: str = "default", deep_t
         chunk_count = 0
         first_token_received = False
         
-        async for chunk in llm.astream([SystemMessage(content=CHAT_SYSTEM_PROMPT)] + all_messages):
+        async for chunk in llm.astream([SystemMessage(content=chat_system_prompt)] + all_messages):
             content = getattr(chunk, 'content', '')
             # 处理content为列表的情况
             if isinstance(content, list):

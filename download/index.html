@@ -537,6 +537,34 @@
     </div>
 </div>
 
+<!-- Agent Edit Modal -->
+<div class="modal-overlay" id="agentEditModal" role="dialog" aria-label="修改智能体" aria-modal="true">
+    <div class="agent-create-modal">
+        <button class="modal-close-btn" onclick="closeAgentEditModal()" aria-label="关闭">&times;</button>
+        <div class="agent-create-inner">
+            <div class="agent-create-header">
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#2563EB" stroke-width="1.8" stroke-linecap="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                <h3>修改智能体</h3>
+                <p>调整名称与任务描述，让智能体更贴合你的需求</p>
+            </div>
+            <div class="agent-create-body">
+                <div class="form-group">
+                    <label for="editAgentName">智能体名称</label>
+                    <input type="text" id="editAgentName" placeholder="如：客服助手、数据分析师" maxlength="20">
+                </div>
+                <div class="form-group">
+                    <label for="editAgentTask">任务描述</label>
+                    <textarea id="editAgentTask" rows="4" placeholder="描述智能体的职责与行为规则"></textarea>
+                </div>
+            </div>
+            <div class="agent-create-footer">
+                <button class="btn btn-cancel" onclick="closeAgentEditModal()">取消</button>
+                <button class="btn btn-forge" onclick="saveAgentEdit()">保存修改</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Knowledge Base Modal -->
 <div class="modal-overlay" id="docsModal" role="dialog" aria-label="知识库管理" aria-modal="true">
     <div class="modal"><h3>知识库管理</h3><div class="upload-section" id="uploadZone" onclick="document.getElementById('kbFileInput').click()" role="button" aria-label="上传文档"><div class="upload-icon">📤</div><div class="upload-text">点击或拖拽文件到此处 <strong>上传到知识库</strong></div><div class="upload-hint">支持 PDF、TXT、DOCX 格式</div></div><input type="file" id="kbFileInput" accept=".pdf,.txt,.docx" onchange="onKbFileSelected(event)" multiple aria-hidden="true"><div class="upload-progress" id="uploadProgress" role="progressbar"><div class="progress-file" id="progressFileName">正在上传...</div><div class="progress-bar-bg"><div class="progress-bar-fill" id="progressBarFill"></div></div><div class="progress-status" id="progressStatus">上传中...</div></div><div class="divider">已索引文档</div><div class="doc-list" id="docList" role="list"><div class="doc-empty">加载中...</div></div><button class="btn btn-primary close-btn" onclick="closeDocs()" aria-label="关闭">关闭</button></div>

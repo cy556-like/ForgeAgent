@@ -112,6 +112,7 @@ class ChatRequest(BaseModel):
     mode: str = "agent"  # agent / chat
     deep_think: bool = False
     agent_id: str = None  # 智能体ID，用于知识库隔离
+    agent_task: str = None  # 智能体任务描述，用于动态系统提示词
 
 
 class ChatResponse(BaseModel):
@@ -218,7 +219,7 @@ async def chat_api(req: ChatRequest, username: str = Depends(get_current_user)):
     """
     start = time.time()
     try:
-        response = chat(req.message, req.session_id, web_search=req.web_search, mode=req.mode, deep_think=req.deep_think, agent_id=req.agent_id)
+        response = chat(req.message, req.session_id, web_search=req.web_search, mode=req.mode, deep_think=req.deep_think, agent_id=req.agent_id, agent_task=req.agent_task)
         # 更新会话时间
         try:
             parts = req.session_id.split("_", 1)
@@ -247,7 +248,7 @@ async def chat_stream_api(req: ChatRequest, username: str = Depends(get_current_
     record_message(username=username or "anonymous", model_id=get_current_model())
 
     async def event_generator():
-        async for chunk in chat_stream_generator(req.message, req.session_id, web_search=req.web_search, mode=req.mode, deep_think=req.deep_think, agent_id=req.agent_id):
+        async for chunk in chat_stream_generator(req.message, req.session_id, web_search=req.web_search, mode=req.mode, deep_think=req.deep_think, agent_id=req.agent_id, agent_task=req.agent_task):
             yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
         # 更新会话时间
         try:
@@ -278,6 +279,7 @@ async def chat_with_file_stream(
     mode: str = Form("agent"),
     deep_think: bool = Form(False),
     agent_id: str = Form(None),
+    agent_task: str = Form(None),
     store_to_kb: str = Form("true"),
     username: str = Depends(get_current_user),
 ):
@@ -385,7 +387,8 @@ async def chat_with_file_stream(
     # 流式回答
     async def event_generator():
         aid = agent_id if agent_id else None
-        async for chunk in chat_stream_generator(full_message, session_id, web_search=web_search, mode=mode, deep_think=deep_think, agent_id=aid):
+        atask = agent_task if agent_task else None
+        async for chunk in chat_stream_generator(full_message, session_id, web_search=web_search, mode=mode, deep_think=deep_think, agent_id=aid, agent_task=atask):
             yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
         try:
             parts = session_id.split("_", 1)
