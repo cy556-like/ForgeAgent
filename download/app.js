@@ -650,9 +650,12 @@ async function loadChatList() {
             renderChatList();
             // 按当前模式恢复会话
             const modeChats = getModeChats();
-            if (modeChats.length === 0) {
+            // 如果当前聊天仍然存在于全部聊天列表中，不要强制跳走
+            // （避免智能体对话回复完成后，因过滤不同步导致跳转到空页面）
+            const currentChatStillExists = currentChatId && allChats.some(c => c.chat_id === currentChatId);
+            if (modeChats.length === 0 && !currentChatStillExists) {
                 await createNewChat();
-            } else if (!currentChatId || !modeChats.some(c => c.chat_id === currentChatId)) {
+            } else if (!currentChatId || (!currentChatStillExists && !modeChats.some(c => c.chat_id === currentChatId))) {
                 currentChatId = modeChats[0].chat_id;
                 modeChatId[currentMode] = currentChatId;
                 renderChatList();
