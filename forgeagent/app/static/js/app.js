@@ -1738,6 +1738,8 @@ document.addEventListener('DOMContentLoaded', async function() {
     // Landing page: scroll-reveal animation with IntersectionObserver
     const revealElements = document.querySelectorAll('.reveal');
     if (revealElements.length > 0 && 'IntersectionObserver' in window) {
+        // Add .reveal-init to enable animation (content visible by default without it)
+        revealElements.forEach(function(el) { el.classList.add('reveal-init'); });
         const revealObserver = new IntersectionObserver(function(entries) {
             entries.forEach(function(entry) {
                 if (entry.isIntersecting) {
