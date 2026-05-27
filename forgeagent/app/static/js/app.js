@@ -28,14 +28,25 @@ function forceCorrectAgents() {
     const existingMap = {};
     existing.forEach(a => { existingMap[a.id] = a; });
 
-    const correctAgents = [
-        { id: 'xf-rd-agent', name: 'XF模具研发智能体', task: '专注于模具研发设计与工艺优化', mode: 'agent', icon: '🔧',
-          created_at: existingMap['xf-rd-agent'] ? existingMap['xf-rd-agent'].created_at : Date.now() / 1000,
-          chat_ids: existingMap['xf-rd-agent'] ? (existingMap['xf-rd-agent'].chat_ids || []) : [] },
-        { id: 'xf-quality-agent', name: 'XF模具质量智能体', task: '专注于模具质量检测与控制', mode: 'agent', icon: '✅',
-          created_at: existingMap['xf-quality-agent'] ? existingMap['xf-quality-agent'].created_at : Date.now() / 1000,
-          chat_ids: existingMap['xf-quality-agent'] ? (existingMap['xf-quality-agent'].chat_ids || []) : [] }
-    ];
+    const defaults = {
+        'xf-rd-agent': { name: 'XF模具研发智能体', task: '专注于模具研发设计与工艺优化' },
+        'xf-quality-agent': { name: 'XF模具质量智能体', task: '专注于模具质量检测与控制' }
+    };
+
+    const correctAgents = Object.keys(defaults).map(id => {
+        const def = defaults[id];
+        const ex = existingMap[id];
+        return {
+            id: id,
+            name: ex ? (ex.name || def.name) : def.name,
+            task: ex ? (ex.task || def.task) : def.task,
+            mode: 'agent',
+            icon: id === 'xf-rd-agent' ? '🔧' : '✅',
+            created_at: ex ? (ex.created_at || Date.now() / 1000) : Date.now() / 1000,
+            chat_ids: ex ? (ex.chat_ids || []) : []
+        };
+    });
+
     localStorage.setItem('forgeAgents', JSON.stringify(correctAgents));
     return correctAgents;
 }
@@ -81,6 +92,8 @@ async function saveAgents() {
                     const local = localMap[serverAgent.id];
                     return {
                         ...serverAgent,
+                        name: local ? (local.name || serverAgent.name) : serverAgent.name,
+                        task: local ? (local.task || serverAgent.task) : serverAgent.task,
                         chat_ids: local ? (local.chat_ids || []) : []
                     };
                 });
@@ -119,6 +132,8 @@ async function syncAgentsFromServer() {
                 const local = localMap[serverAgent.id];
                 return {
                     ...serverAgent,
+                    name: local ? (local.name || serverAgent.name) : serverAgent.name,
+                    task: local ? (local.task || serverAgent.task) : serverAgent.task,
                     chat_ids: local ? (local.chat_ids || []) : []
                 };
             });
