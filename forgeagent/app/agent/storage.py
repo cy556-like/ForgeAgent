@@ -27,6 +27,9 @@ def _user_file(username: str) -> str:
     return os.path.join(AGENTS_DIR, f"{username}.json")
 
 
+# 允许的智能体ID白名单
+ALLOWED_AGENT_IDS = {'xf-rd-agent', 'xf-quality-agent'}
+
 def load_agents(username: str) -> list:
     """
     加载用户的智能体列表
@@ -38,11 +41,13 @@ def load_agents(username: str) -> list:
     try:
         with open(filepath, "r", encoding="utf-8") as f:
             data = json.load(f)
+        agents = []
         if isinstance(data, list):
-            return data
+            agents = data
         elif isinstance(data, dict) and "agents" in data:
-            return data["agents"]
-        return []
+            agents = data["agents"]
+        # 过滤：只保留允许的智能体ID
+        return [a for a in agents if a.get("id") in ALLOWED_AGENT_IDS]
     except (json.JSONDecodeError, IOError) as e:
         logger.warning(f"加载智能体数据失败 [{username}]: {e}")
         return []
@@ -112,6 +117,9 @@ def sync_agents(username: str, client_agents: list) -> dict:
     
     # 按 created_at 排序
     merged.sort(key=lambda a: a.get("created_at", 0), reverse=True)
+    
+    # 过滤：只保留允许的智能体ID
+    merged = [a for a in merged if a.get("id") in ALLOWED_AGENT_IDS]
     
     # 保存合并结果
     save_agents(username, merged)
