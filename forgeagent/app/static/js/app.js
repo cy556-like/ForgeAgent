@@ -24,10 +24,48 @@ let myAgents = JSON.parse(localStorage.getItem('forgeAgents') || '[]');
 let currentAgentId = null;
 let agentKbUploadMode = false;
 
-function saveAgents() {
+async function saveAgents() {
     localStorage.setItem('forgeAgents', JSON.stringify(myAgents));
+    // 同步到服务器
+    if (currentUser && authToken) {
+        try {
+            const resp = await fetch('/api/v1/agents/sync', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
+                body: JSON.stringify({ agents: myAgents })
+            });
+            const data = await resp.json();
+            if (data.success && data.agents && data.agents.length > 0) {
+                myAgents = data.agents;
+                localStorage.setItem('forgeAgents', JSON.stringify(myAgents));
+            }
+        } catch (e) {
+            console.warn('[智能体同步失败]', e);
+        }
+    }
 }
 
+
+
+async function syncAgentsFromServer() {
+    // 从服务器拉取最新智能体数据并合并
+    if (!currentUser || !authToken) return;
+    try {
+        const resp = await fetch('/api/v1/agents/sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
+            body: JSON.stringify({ agents: myAgents })
+        });
+        const data = await resp.json();
+        if (data.success && data.agents) {
+            myAgents = data.agents;
+            localStorage.setItem('forgeAgents', JSON.stringify(myAgents));
+            console.log(`[智能体同步] 成功: 共${data.total}个, 新增${data.added}, 更新${data.updated}`);
+        }
+    } catch (e) {
+        console.warn('[智能体同步失败]', e);
+    }
+}
 function generateAgentId() {
     return 'agent_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 6);
 }
@@ -631,6 +669,7 @@ async function doLogin() {
                 document.getElementById('sidebarAvatar').textContent = username[0].toUpperCase();
                 loadChatList();
                 loadModels();
+                await syncAgentsFromServer();
                 renderMyAgents();
                 updateKbUploadVisibility();
             }, 500);
