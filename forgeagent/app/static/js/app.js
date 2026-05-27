@@ -718,6 +718,7 @@ async function tryAutoLogin() {
             document.getElementById('sidebarAvatar').textContent = data.username[0].toUpperCase();
             loadChatList();
             loadModels();
+            await syncAgentsFromServer();
             renderMyAgents();
             updateKbUploadVisibility();
             return true;
