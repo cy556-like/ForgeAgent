@@ -3017,6 +3017,14 @@ html { scroll-behavior: smooth; }
     max-height: 240px;
     padding: 0 6px 6px;
 }
+/* Fixed agents list (no collapsible header) */
+.fixed-agents-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 0 8px 4px;
+}
+
 .agent-item {
     display: flex;
     align-items: center;
