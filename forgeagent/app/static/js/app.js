@@ -1693,8 +1693,21 @@ async function exportChat(format) {
 // ===== Knowledge Base Panel =====
 function toggleKbPanel() {
     const panel = document.getElementById('kbPanel');
+    if (!panel) return;
+    const wasShown = panel.classList.contains('show');
     panel.classList.toggle('show');
-    if (panel.classList.contains('show')) {
+    
+    if (!wasShown) {
+        // Update agent name display
+        const agentNameEl = document.getElementById('kbAgentName');
+        if (currentAgentId) {
+            const agent = myAgents.find(a => a.id === currentAgentId);
+            if (agentNameEl) agentNameEl.textContent = agent ? agent.name : '';
+        } else {
+            if (agentNameEl) agentNameEl.textContent = '（未选择智能体）';
+        }
+        const uploadBtn = document.querySelector('.kb-panel-upload');
+        if (uploadBtn) uploadBtn.style.display = currentAgentId ? '' : 'none';
         loadKbDocs();
         setTimeout(() => { document.addEventListener('click', closeKbPanel, { once: true }); }, 0);
     }
@@ -1772,7 +1785,8 @@ async function uploadKbDoc(input) {
 async function deleteKbDoc(filename) {
     if (!confirm(`确定删除文档「${filename}」？`)) return;
     try {
-        const resp = await fetch(`/api/v1/documents/${encodeURIComponent(filename)}?agent_id=${encodeURIComponent(currentAgentId || '')}`, { method: 'DELETE', headers: apiHeaders() });
+        const agentParam = currentAgentId ? `?agent_id=${encodeURIComponent(currentAgentId)}` : '';
+        const resp = await fetch(`/api/v1/documents/${encodeURIComponent(filename)}${agentParam}`, { method: 'DELETE', headers: apiHeaders() });
         const data = await resp.json();
         if (data.status === 'success') {
             showToast('文档已删除');
