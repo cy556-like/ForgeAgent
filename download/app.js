@@ -633,6 +633,8 @@ async function tryAutoLogin() {
             document.getElementById('sidebarAvatar').textContent = data.username[0].toUpperCase();
             loadChatList();
             loadModels();
+            renderMyAgents();
+            updateKbUploadVisibility();
             return true;
         }
     } catch (e) { console.warn('自动登录失败', e); }
