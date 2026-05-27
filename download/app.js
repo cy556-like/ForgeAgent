@@ -1271,7 +1271,9 @@ async function loadDocList() {
     const list = document.getElementById('docList');
     list.innerHTML = '<div class="doc-empty">加载中...</div>';
     try {
-        const resp = await fetch('/api/v1/documents', { headers: apiHeaders() });
+        // 按 agent_id 获取对应知识库的文档列表
+        const agentParam = currentAgentId ? `&agent_id=${encodeURIComponent(currentAgentId)}` : '';
+        const resp = await fetch(`/api/v1/documents?${agentParam}`, { headers: apiHeaders() });
         const data = await resp.json();
         list.innerHTML = '';
         if (data.documents && data.documents.length > 0) {
