@@ -24,21 +24,32 @@ const MAX_FILE_SIZE = 50 * 1024 * 1024;
 const ALLOWED_AGENT_IDS = ['xf-rd-agent', 'xf-quality-agent'];
 
 function forceCorrectAgents() {
+    const existing = JSON.parse(localStorage.getItem('forgeAgents') || '[]');
+    const existingMap = {};
+    existing.forEach(a => { existingMap[a.id] = a; });
+
     const correctAgents = [
-        { id: 'xf-rd-agent', name: 'XF模具研发智能体', task: '专注于模具研发设计与工艺优化', mode: 'agent', created_at: Date.now() / 1000, chat_ids: [] },
-        { id: 'xf-quality-agent', name: 'XF模具质量智能体', task: '专注于模具质量检测与控制', mode: 'agent', created_at: Date.now() / 1000, chat_ids: [] }
+        { id: 'xf-rd-agent', name: 'XF模具研发智能体', task: '专注于模具研发设计与工艺优化', mode: 'agent', icon: '🔧',
+          created_at: existingMap['xf-rd-agent'] ? existingMap['xf-rd-agent'].created_at : Date.now() / 1000,
+          chat_ids: existingMap['xf-rd-agent'] ? (existingMap['xf-rd-agent'].chat_ids || []) : [] },
+        { id: 'xf-quality-agent', name: 'XF模具质量智能体', task: '专注于模具质量检测与控制', mode: 'agent', icon: '✅',
+          created_at: existingMap['xf-quality-agent'] ? existingMap['xf-quality-agent'].created_at : Date.now() / 1000,
+          chat_ids: existingMap['xf-quality-agent'] ? (existingMap['xf-quality-agent'].chat_ids || []) : [] }
     ];
     localStorage.setItem('forgeAgents', JSON.stringify(correctAgents));
     return correctAgents;
 }
 
 function filterAgents(agents) {
-    if (!Array.isArray(agents)) return forceCorrectAgents();
-    const filtered = agents.filter(a => ALLOWED_AGENT_IDS.includes(a.id));
-    if (filtered.length !== ALLOWED_AGENT_IDS.length) {
-        return forceCorrectAgents();
+    if (!agents || !Array.isArray(agents)) return forceCorrectAgents();
+    const allowedIds = ['xf-rd-agent', 'xf-quality-agent'];
+    const filtered = agents.filter(a => allowedIds.includes(a.id));
+    // If we already have exactly the 2 correct agents with chat_ids, just return them (preserving chat_ids etc)
+    if (filtered.length === 2 && filtered.every(a => a.chat_ids !== undefined)) {
+        return filtered;
     }
-    return filtered;
+    // Otherwise, force correct but preserve existing data
+    return forceCorrectAgents();
 }
 
 let myAgents = filterAgents(JSON.parse(localStorage.getItem('forgeAgents') || 'null'));
@@ -49,18 +60,31 @@ async function saveAgents() {
     // 过滤：只保留允许的智能体
     myAgents = filterAgents(myAgents);
     localStorage.setItem('forgeAgents', JSON.stringify(myAgents));
-    // 同步到服务器
+    // 同步到服务器（strip chat_ids since server doesn't use them - conversations are stored server-side with agent_id）
     if (currentUser && authToken) {
         try {
+            const agentsForServer = myAgents.map(a => ({
+                id: a.id, name: a.name, task: a.task, mode: a.mode, created_at: a.created_at
+            }));
             const resp = await fetch('/api/v1/agents/sync', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
-                body: JSON.stringify({ agents: myAgents })
+                body: JSON.stringify({ agents: agentsForServer })
             });
             const data = await resp.json();
             if (data.success && data.agents && data.agents.length > 0) {
-                // 过滤：只保留允许的智能体
-                myAgents = filterAgents(data.agents);
+                // Merge: preserve local chat_ids when server data comes back
+                const localAgents = JSON.parse(localStorage.getItem('forgeAgents') || '[]');
+                const localMap = {};
+                localAgents.forEach(a => { localMap[a.id] = a; });
+                const mergedAgents = data.agents.map(serverAgent => {
+                    const local = localMap[serverAgent.id];
+                    return {
+                        ...serverAgent,
+                        chat_ids: local ? (local.chat_ids || []) : []
+                    };
+                });
+                myAgents = filterAgents(mergedAgents);
                 localStorage.setItem('forgeAgents', JSON.stringify(myAgents));
             }
         } catch (e) {
@@ -72,18 +96,34 @@ async function saveAgents() {
 
 
 async function syncAgentsFromServer() {
-    // 从服务器拉取最新智能体数据并合并
+    // 从服务器拉取最新智能体数据并合并（保留本地 chat_ids）
     if (!currentUser || !authToken) return;
     try {
+        // Strip chat_ids before sending to server
+        const agentsForServer = myAgents.map(a => ({
+            id: a.id, name: a.name, task: a.task, mode: a.mode, created_at: a.created_at
+        }));
         const resp = await fetch('/api/v1/agents/sync', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
-            body: JSON.stringify({ agents: myAgents })
+            body: JSON.stringify({ agents: agentsForServer })
         });
         const data = await resp.json();
         if (data.success && data.agents) {
-            // 过滤：只保留允许的智能体
-            myAgents = filterAgents(data.agents);
+            // Preserve local chat_ids when merging server data
+            const localAgents = JSON.parse(localStorage.getItem('forgeAgents') || '[]');
+            const localMap = {};
+            localAgents.forEach(a => { localMap[a.id] = a; });
+
+            const mergedAgents = data.agents.map(serverAgent => {
+                const local = localMap[serverAgent.id];
+                return {
+                    ...serverAgent,
+                    chat_ids: local ? (local.chat_ids || []) : []
+                };
+            });
+
+            myAgents = filterAgents(mergedAgents);
             localStorage.setItem('forgeAgents', JSON.stringify(myAgents));
             console.log(`[智能体同步] 成功: 共${data.total}个, 新增${data.added}, 更新${data.updated}`);
         }
@@ -180,7 +220,15 @@ async function switchToAgent(agentId) {
     
     // Load or create chat for this agent
     if (agent.chat_ids && agent.chat_ids.length > 0) {
-        currentChatId = agent.chat_ids[0];
+        // Try to restore last active chat for this agent
+        const lastChatId = agentActiveChatId[agentId];
+        if (lastChatId && agent.chat_ids.includes(lastChatId)) {
+            currentChatId = lastChatId;
+        } else {
+            currentChatId = agent.chat_ids[0];
+            agentActiveChatId[agentId] = currentChatId;
+            saveAgentActiveChatIds();
+        }
         modeChatId['agent'] = currentChatId;
         renderChatList();
         await loadChatHistory(currentChatId);
@@ -312,6 +360,22 @@ function toggleAgentKbUpload() {
 
 // 每个模式独立记录当前会话ID，切换模式时恢复
 let modeChatId = { agent: null, chat: null };
+// Per-agent active chat tracking for conversation isolation
+let agentActiveChatId = { 'xf-rd-agent': null, 'xf-quality-agent': null };
+
+function saveAgentActiveChatIds() {
+    localStorage.setItem('agentActiveChatIds', JSON.stringify(agentActiveChatId));
+}
+
+function loadAgentActiveChatIds() {
+    try {
+        const saved = localStorage.getItem('agentActiveChatIds');
+        if (saved) agentActiveChatId = JSON.parse(saved);
+    } catch(e) {}
+}
+
+// Load per-agent active chat IDs at startup
+loadAgentActiveChatIds();
 
 // ===== API Helper (with JWT Token) =====
 function apiHeaders() {
@@ -358,6 +422,12 @@ function toggleWebSearch() {
 function switchMode(mode) {
     if (currentMode === mode) return;
 
+    // Before switching away from agent mode, save the current agent's active chat
+    if (currentMode === 'agent' && currentAgentId) {
+        agentActiveChatId[currentAgentId] = currentChatId;
+        saveAgentActiveChatIds();
+    }
+
     // 保存当前模式的 chatId
     modeChatId[currentMode] = currentChatId;
 
@@ -393,6 +463,14 @@ function switchMode(mode) {
     if (mode === 'chat') {
         currentAgentId = null;
         renderMyAgents();
+    }
+
+    // After switching to agent mode, restore from agentActiveChatId
+    if (mode === 'agent' && currentAgentId) {
+        const lastChat = agentActiveChatId[currentAgentId];
+        if (lastChat) {
+            modeChatId['agent'] = lastChat;
+        }
     }
 
     // 更新知识库上传按钮可见性
@@ -435,23 +513,28 @@ async function restoreModeChat() {
 
 // 获取当前模式的会话列表
 function getModeChats() {
-    return allChats.filter(chat => {
-        const modeMatch = chat.mode === currentMode || (!chat.mode && currentMode === 'agent');
-        if (!modeMatch) return false;
-        // If in agent mode with a specific agent, filter by agent
-        if (currentMode === 'agent' && currentAgentId) {
-            const agent = myAgents.find(a => a.id === currentAgentId);
-            if (agent && agent.chat_ids) {
-                return agent.chat_ids.includes(chat.chat_id);
-            }
+    // Chat mode: show chats with mode='chat'
+    if (currentMode === 'chat') {
+        return allChats.filter(chat => chat.mode === 'chat');
+    }
+    // Agent mode with specific agent: show that agent's chats
+    if (currentMode === 'agent' && currentAgentId) {
+        const agent = myAgents.find(a => a.id === currentAgentId);
+        if (agent && agent.chat_ids) {
+            return allChats.filter(chat => agent.chat_ids.includes(chat.chat_id));
         }
-        // If in agent mode but no specific agent selected, show non-agent chats
-        if (currentMode === 'agent' && !currentAgentId) {
-            const anyAgent = myAgents.find(a => a.chat_ids && a.chat_ids.includes(chat.chat_id));
-            return !anyAgent;
-        }
-        return true;
-    });
+        return [];
+    }
+    // Agent mode but no specific agent: show agent-mode chats not belonging to any agent
+    if (currentMode === 'agent' && !currentAgentId) {
+        return allChats.filter(chat => {
+            const modeMatch = chat.mode === 'agent' || (!chat.mode && currentMode === 'agent');
+            if (!modeMatch) return false;
+            const belongsToAnyAgent = myAgents.some(a => a.chat_ids && a.chat_ids.includes(chat.chat_id));
+            return !belongsToAnyAgent;
+        });
+    }
+    return [];
 }
 
 (function initMode() {
@@ -814,7 +897,9 @@ async function createNewChat() {
                 const agent = myAgents.find(a => a.id === currentAgentId);
                 if (agent) {
                     if (!agent.chat_ids) agent.chat_ids = [];
-                    agent.chat_ids.push(currentChatId);
+                    agent.chat_ids.push(data.chat.chat_id);
+                    agentActiveChatId[currentAgentId] = data.chat.chat_id;
+                    saveAgentActiveChatIds();
                     saveAgents();
                 }
             }
@@ -829,6 +914,29 @@ async function switchChat(chatId) {
     if (chatId === currentChatId) return;
     currentChatId = chatId;
     modeChatId[currentMode] = chatId;
+
+    // Determine which agent owns this chat
+    let belongsToAgent = null;
+    myAgents.forEach(agent => {
+        if (agent.chat_ids && agent.chat_ids.includes(chatId)) {
+            belongsToAgent = agent.id;
+        }
+    });
+    if (belongsToAgent) {
+        currentAgentId = belongsToAgent;
+        agentActiveChatId[currentAgentId] = chatId;
+        saveAgentActiveChatIds();
+    } else if (currentMode === 'agent') {
+        // Chat doesn't belong to any agent, but we're in agent mode
+        // Check if the chat has an agent_id in allChats
+        const chatData = allChats.find(c => c.chat_id === chatId);
+        if (chatData && chatData.agent_id) {
+            currentAgentId = chatData.agent_id;
+            agentActiveChatId[currentAgentId] = chatId;
+            saveAgentActiveChatIds();
+        }
+    }
+
     renderChatList();
     await loadChatHistory(chatId);
 }
@@ -852,6 +960,20 @@ async function deleteChatItem(chatId) {
     if (!confirm('确定删除这个对话？')) return;
     try {
         await fetch(`/api/v1/chats/${chatId}?username=${encodeURIComponent(currentUser)}`, { method: 'DELETE', headers: apiHeaders() });
+
+        // Remove chat_id from all agents
+        myAgents.forEach(agent => {
+            if (agent.chat_ids) {
+                agent.chat_ids = agent.chat_ids.filter(id => id !== chatId);
+            }
+            // Also clean agentActiveChatId
+            if (agentActiveChatId[agent.id] === chatId) {
+                agentActiveChatId[agent.id] = agent.chat_ids && agent.chat_ids.length > 0 ? agent.chat_ids[0] : null;
+            }
+        });
+        saveAgentActiveChatIds();
+        saveAgents();
+
         if (chatId === currentChatId) {
             currentChatId = null;
             modeChatId[currentMode] = null;
