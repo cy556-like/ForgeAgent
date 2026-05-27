@@ -20,14 +20,34 @@ let currentMode = 'agent';
 const MAX_FILE_SIZE = 50 * 1024 * 1024;
 
 // ===== Agent Management =====
-let myAgents = JSON.parse(localStorage.getItem('forgeAgents') || 'null') || [
-    { id: 'agent_xf_dev', name: 'XF模具研发智能体', task: '专注于模具设计与研发优化，提供模具结构分析、材料选择建议、工艺参数优化等专业技术支持', mode: 'agent', created_at: Date.now() / 1000, chat_ids: [] },
-    { id: 'agent_xf_qa', name: 'XF模具质量智能体', task: '专注于模具质量管控与风险检测，提供模具寿命预测、缺陷分析、质量评估与改进方案等专业支持', mode: 'agent', created_at: Date.now() / 1000, chat_ids: [] }
-];
+// 强制只保留2个允许的智能体
+const ALLOWED_AGENT_IDS = ['xf-rd-agent', 'xf-quality-agent'];
+
+function forceCorrectAgents() {
+    const correctAgents = [
+        { id: 'xf-rd-agent', name: 'XF模具研发智能体', task: '专注于模具研发设计与工艺优化', mode: 'agent', created_at: Date.now() / 1000, chat_ids: [] },
+        { id: 'xf-quality-agent', name: 'XF模具质量智能体', task: '专注于模具质量检测与控制', mode: 'agent', created_at: Date.now() / 1000, chat_ids: [] }
+    ];
+    localStorage.setItem('forgeAgents', JSON.stringify(correctAgents));
+    return correctAgents;
+}
+
+function filterAgents(agents) {
+    if (!Array.isArray(agents)) return forceCorrectAgents();
+    const filtered = agents.filter(a => ALLOWED_AGENT_IDS.includes(a.id));
+    if (filtered.length !== ALLOWED_AGENT_IDS.length) {
+        return forceCorrectAgents();
+    }
+    return filtered;
+}
+
+let myAgents = filterAgents(JSON.parse(localStorage.getItem('forgeAgents') || 'null'));
 let currentAgentId = null;
 let agentKbUploadMode = false;
 
 async function saveAgents() {
+    // 过滤：只保留允许的智能体
+    myAgents = filterAgents(myAgents);
     localStorage.setItem('forgeAgents', JSON.stringify(myAgents));
     // 同步到服务器
     if (currentUser && authToken) {
@@ -39,7 +59,8 @@ async function saveAgents() {
             });
             const data = await resp.json();
             if (data.success && data.agents && data.agents.length > 0) {
-                myAgents = data.agents;
+                // 过滤：只保留允许的智能体
+                myAgents = filterAgents(data.agents);
                 localStorage.setItem('forgeAgents', JSON.stringify(myAgents));
             }
         } catch (e) {
@@ -61,7 +82,8 @@ async function syncAgentsFromServer() {
         });
         const data = await resp.json();
         if (data.success && data.agents) {
-            myAgents = data.agents;
+            // 过滤：只保留允许的智能体
+            myAgents = filterAgents(data.agents);
             localStorage.setItem('forgeAgents', JSON.stringify(myAgents));
             console.log(`[智能体同步] 成功: 共${data.total}个, 新增${data.added}, 更新${data.updated}`);
         }
