@@ -23,6 +23,7 @@ from fastapi.responses import StreamingResponse, Response
 from pydantic import BaseModel
 
 from app.agent.core import chat, chat_stream_generator, chat_stream_generator_multimodal, reset_agent
+from app.agent.storage import sync_agents as sync_agents_storage, load_agents, debug_info as agent_debug_info
 from app.rag.document import index_document, search_documents, list_indexed_documents, delete_document, update_document, delete_agent_collection, list_all_collections, load_document, export_document_as_docx, reindex_all_documents
 from app.auth.user_manager import login_user, register_user
 from app.auth.jwt_handler import create_token, verify_token, get_username_from_token
@@ -170,6 +171,11 @@ class ExportDocumentRequest(BaseModel):
     content: str  # 文档内容（纯文本）
     filename: str = ""  # 输出文件名（含扩展名），为空则自动生成
     title: str = ""  # 文档标题，为空则使用filename
+
+class AgentSyncRequest(BaseModel):
+    """智能体同步请求"""
+    agents: list  # 智能体列表
+
 
 
 # ===== 认证接口 =====
@@ -916,6 +922,74 @@ async def debug_collections():
     """诊断接口：列出所有 ChromaDB collection 及其文档数"""
     collections = list_all_collections()
     return {"collections": collections}
+
+
+
+
+
+# ===== 智能体同步接口 =====
+
+@router.post("/agents/sync", summary="同步智能体数据（跨浏览器/设备同步）")
+async def sync_agents_api(
+    req: AgentSyncRequest,
+    username: str = Depends(require_auth),
+):
+    """
+    同步智能体数据：
+    - 客户端上传本地智能体列表
+    - 服务端按 agent_id 合并（不覆盖，取较新版本）
+    - 返回合并后的完整列表
+    
+    解决跨浏览器/设备智能体数据不一致问题
+    """
+    if not username:
+        raise HTTPException(status_code=401, detail="未认证，请重新登录")
+    
+    try:
+        result = sync_agents_storage(username, req.agents)
+        return {
+            "success": True,
+            "agents": result["agents"],
+            "synced": result["synced"],
+            "added": result["added"],
+            "updated": result["updated"],
+            "total": result["total"],
+        }
+    except Exception as e:
+        logger.error(f"智能体同步失败 [{username}]: {e}")
+        raise HTTPException(status_code=500, detail=f"同步失败: {str(e)}")
+
+
+@router.get("/agents", summary="获取用户的智能体列表")
+async def get_agents(username: str = Depends(require_auth)):
+    """
+    获取当前用户的所有智能体
+    """
+    if not username:
+        raise HTTPException(status_code=401, detail="未认证，请重新登录")
+    
+    agents = load_agents(username)
+    return {
+        "success": True,
+        "agents": agents,
+        "total": len(agents),
+    }
+
+
+@router.get("/agents/debug", summary="智能体数据诊断")
+async def agents_debug(username: str = Depends(require_auth)):
+    """
+    诊断接口：返回用户智能体数据的详细信息
+    用于排查跨浏览器同步问题
+    """
+    if not username:
+        raise HTTPException(status_code=401, detail="未认证，请重新登录")
+    
+    info = agent_debug_info(username)
+    return {
+        "success": True,
+        "debug": info,
+    }
 
 
 @router.post("/reindex", summary="重建知识库索引（切换embedding模型后使用）")
