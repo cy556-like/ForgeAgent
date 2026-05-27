@@ -168,20 +168,10 @@ async function switchToAgent(agentId) {
 }
 
 function renderMyAgents() {
-    const section = document.getElementById('myAgentsSection');
     const list = document.getElementById('myAgentsList');
-    const count = document.getElementById('myAgentsCount');
-    
-    count.textContent = myAgents.length;
-    
-    if (myAgents.length === 0) {
-        section.style.display = 'none';
-        return;
-    }
-    
-    section.style.display = '';
+    if (!list) return;
     list.innerHTML = '';
-    
+
     myAgents.forEach(agent => {
         const item = document.createElement('div');
         item.className = `agent-item${agent.id === currentAgentId ? ' active' : ''}`;
@@ -196,10 +186,6 @@ function renderMyAgents() {
             <div class="agent-item-info">
                 <div class="agent-item-name">${escapeHtml(agent.name)}</div>
                 <div class="agent-item-task">${escapeHtml(agent.task)}</div>
-            </div>
-            <div class="agent-item-actions">
-                <button class="agent-action-btn edit" onclick="openAgentEditModal('${agent.id}')" title="修改" aria-label="修改智能体">✏️</button>
-                <button class="agent-action-btn delete" onclick="deleteAgent('${agent.id}')" title="删除" aria-label="删除智能体">🗑️</button>
             </div>
         `;
         list.appendChild(item);
