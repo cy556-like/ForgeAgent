@@ -1157,6 +1157,8 @@ html { scroll-behavior: smooth; }
 .sidebar.collapsed .sidebar-brand { justify-content: center; padding: 4px 0; }
 .sidebar.collapsed .sidebar-brand .sidebar-brand-name { display: none; }
 .sidebar.collapsed .sidebar-brand .sidebar-brand-icon { width: 28px; height: 28px; }
+.sidebar.collapsed .sidebar-controls { display: none; }
+.sidebar.collapsed .fixed-agents-list { display: none; }
 
 .sidebar-header {
     padding: 12px;
@@ -1164,6 +1166,13 @@ html { scroll-behavior: smooth; }
     display: flex;
     flex-direction: column;
     gap: 8px;
+}
+.sidebar-controls {
+    padding: 0 12px 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    border-bottom: 1px solid var(--border);
 }
 .sidebar-brand {
     display: flex;
@@ -3022,7 +3031,8 @@ html { scroll-behavior: smooth; }
     display: flex;
     flex-direction: column;
     gap: 2px;
-    padding: 0 8px 4px;
+    padding: 4px 8px;
+    border-bottom: 1px solid var(--border);
 }
 
 .agent-item {
@@ -3108,6 +3118,16 @@ html { scroll-behavior: smooth; }
 .agent-action-btn:hover {
     background: rgba(0,0,0,0.06);
     color: var(--text-primary);
+}
+.agent-item .agent-action-btn.edit {
+    opacity: 0;
+    transition: opacity 0.15s;
+}
+.agent-item:hover .agent-action-btn.edit {
+    opacity: 1;
+}
+.agent-item.active .agent-action-btn.edit {
+    opacity: 1;
 }
 .agent-action-btn.delete:hover {
     color: var(--error);
