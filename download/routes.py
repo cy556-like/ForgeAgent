@@ -512,12 +512,12 @@ async def modify_document_api(filename: str, req: ModifyDocumentRequest):
 
 
 @router.delete("/documents/{filename}", summary="从知识库删除文档")
-async def delete_document_api(filename: str):
+async def delete_document_api(filename: str, agent_id: str = Query(None, description="智能体ID，为空时删全局知识库文档")):
     """
     从知识库中删除指定文档
     同时删除 ChromaDB 中的向量分块和原始文件
     """
-    result = delete_document(filename)
+    result = delete_document(filename, agent_id=agent_id)
     if result["status"] == "not_found":
         raise HTTPException(status_code=404, detail=result["message"])
     if result["status"] == "error":

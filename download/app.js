@@ -1433,47 +1433,98 @@ async function exportChat(format) {
     }
 }
 
-// ===== Stats Panel =====
-function toggleStatsPanel() {
-    const panel = document.getElementById('statsPanel');
+// ===== Knowledge Base Panel =====
+function toggleKbPanel() {
+    const panel = document.getElementById('kbPanel');
     panel.classList.toggle('show');
     if (panel.classList.contains('show')) {
-        loadStats();
-        setTimeout(() => { document.addEventListener('click', closeStatsPanel, { once: true }); }, 0);
+        loadKbDocs();
+        setTimeout(() => { document.addEventListener('click', closeKbPanel, { once: true }); }, 0);
     }
 }
 
-function closeStatsPanel(e) {
-    const panel = document.getElementById('statsPanel');
-    if (panel && !panel.contains(e.target) && !e.target.closest('.stats-btn')) {
+function closeKbPanel(e) {
+    const panel = document.getElementById('kbPanel');
+    if (panel && !panel.contains(e.target) && !e.target.closest('.kb-btn')) {
         panel.classList.remove('show');
     }
 }
 
-async function loadStats() {
+async function loadKbDocs() {
+    const listEl = document.getElementById('kbDocList');
+    if (!currentAgentId) {
+        listEl.innerHTML = '<div class="kb-empty">请先选择一个智能体</div>';
+        return;
+    }
+    listEl.innerHTML = '<div class="kb-empty">加载中...</div>';
     try {
-        const resp = await fetch('/api/v1/stats', { headers: apiHeaders() });
+        const resp = await fetch(`/api/v1/documents?agent_id=${encodeURIComponent(currentAgentId)}`, { headers: apiHeaders() });
         const data = await resp.json();
-        if (data.success) {
-            renderStats(data.stats);
+        const docs = data.documents || [];
+        if (docs.length === 0) {
+            listEl.innerHTML = '<div class="kb-empty">暂无文档，点击上方按钮上传</div>';
+            return;
         }
-    } catch (e) { console.error('加载统计失败', e); }
+        let html = `<div class="kb-doc-count">共 ${docs.length} 个文档</div>`;
+        docs.forEach(doc => {
+            const ext = doc.split('.').pop().toLowerCase();
+            const icon = ext === 'pdf' ? '📕' : ext === 'docx' ? '📘' : '📄';
+            html += `<div class="kb-doc-item">
+                <div class="kb-doc-info">
+                    <span class="kb-doc-icon">${icon}</span>
+                    <span class="kb-doc-name" title="${escapeHtml(doc)}">${escapeHtml(doc)}</span>
+                </div>
+                <button class="kb-doc-delete" onclick="deleteKbDoc('${escapeHtml(doc)}')" title="删除文档">🗑️</button>
+            </div>`;
+        });
+        listEl.innerHTML = html;
+    } catch (e) {
+        console.error('加载知识库文档列表失败', e);
+        listEl.innerHTML = '<div class="kb-empty">加载失败，请重试</div>';
+    }
 }
 
-function renderStats(stats) {
-    document.getElementById('statTotalMsg').textContent = (stats.total_messages || 0).toLocaleString();
-    document.getElementById('statTodayMsg').textContent = (stats.today_messages || 0).toLocaleString();
-    document.getElementById('statTotalSessions').textContent = (stats.total_sessions || 0).toLocaleString();
-    document.getElementById('statActive7d').textContent = stats.active_users_7d || 0;
+async function uploadKbDoc(input) {
+    if (!input.files || !input.files[0]) return;
+    const file = input.files[0];
+    if (!currentAgentId) {
+        showToast('请先选择一个智能体');
+        input.value = '';
+        return;
+    }
+    showToast('正在上传并索引...');
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('agent_id', currentAgentId);
+    try {
+        const resp = await fetch('/api/v1/upload', { method: 'POST', body: formData, headers: authToken ? { 'Authorization': 'Bearer ' + authToken } : {} });
+        const data = await resp.json();
+        if (data.status === 'success') {
+            const chunks = data.detail?.chunks || 0;
+            showToast(`文档已上传，共 ${chunks} 个分块`);
+            loadKbDocs();
+        } else {
+            showToast(data.detail || '上传失败');
+        }
+    } catch (e) {
+        showToast('上传失败，请重试');
+    }
+    input.value = '';
+}
 
-    // Trend bars
-    const trendContainer = document.getElementById('statTrendBars');
-    if (trendContainer && stats.recent_7d) {
-        const maxMsg = Math.max(...stats.recent_7d.map(d => d.messages), 1);
-        trendContainer.innerHTML = stats.recent_7d.map(d => {
-            const height = Math.max((d.messages / maxMsg) * 36, 2);
-            return `<div class="bar" style="height:${height}px" title="${d.date}: ${d.messages}条"></div>`;
-        }).join('');
+async function deleteKbDoc(filename) {
+    if (!confirm(`确定删除文档「${filename}」？`)) return;
+    try {
+        const resp = await fetch(`/api/v1/documents/${encodeURIComponent(filename)}?agent_id=${encodeURIComponent(currentAgentId || '')}`, { method: 'DELETE', headers: apiHeaders() });
+        const data = await resp.json();
+        if (data.status === 'success') {
+            showToast('文档已删除');
+            loadKbDocs();
+        } else {
+            showToast(data.detail?.message || data.message || '删除失败');
+        }
+    } catch (e) {
+        showToast('删除失败，请重试');
     }
 }
 
