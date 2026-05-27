@@ -947,13 +947,16 @@ async def sync_agents_api(
     
     try:
         result = sync_agents_storage(username, req.agents)
+        # 过滤：只保留允许的智能体ID
+        allowed_ids = {'xf-rd-agent', 'xf-quality-agent'}
+        filtered_agents = [a for a in result["agents"] if a.get("id") in allowed_ids]
         return {
             "success": True,
-            "agents": result["agents"],
+            "agents": filtered_agents,
             "synced": result["synced"],
             "added": result["added"],
             "updated": result["updated"],
-            "total": result["total"],
+            "total": len(filtered_agents),
         }
     except Exception as e:
         logger.error(f"智能体同步失败 [{username}]: {e}")
@@ -969,6 +972,9 @@ async def get_agents(username: str = Depends(require_auth)):
         raise HTTPException(status_code=401, detail="未认证，请重新登录")
     
     agents = load_agents(username)
+    # 过滤：只保留允许的智能体ID
+    allowed_ids = {'xf-rd-agent', 'xf-quality-agent'}
+    agents = [a for a in agents if a.get("id") in allowed_ids]
     return {
         "success": True,
         "agents": agents,
