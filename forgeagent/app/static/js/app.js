@@ -20,7 +20,10 @@ let currentMode = 'agent';
 const MAX_FILE_SIZE = 50 * 1024 * 1024;
 
 // ===== Agent Management =====
-let myAgents = JSON.parse(localStorage.getItem('forgeAgents') || '[]');
+let myAgents = JSON.parse(localStorage.getItem('forgeAgents') || 'null') || [
+    { id: 'agent_xf_dev', name: 'XF模具研发智能体', task: '专注于模具设计与研发优化，提供模具结构分析、材料选择建议、工艺参数优化等专业技术支持', mode: 'agent', created_at: Date.now() / 1000, chat_ids: [] },
+    { id: 'agent_xf_qa', name: 'XF模具质量智能体', task: '专注于模具质量管控与风险检测，提供模具寿命预测、缺陷分析、质量评估与改进方案等专业支持', mode: 'agent', created_at: Date.now() / 1000, chat_ids: [] }
+];
 let currentAgentId = null;
 let agentKbUploadMode = false;
 
@@ -125,7 +128,7 @@ function deleteAgent(agentId) {
         document.getElementById('kbUploadToggle').classList.remove('active');
         document.getElementById('agentKbBar').style.display = 'none';
         modeChatId['agent'] = null;
-        document.getElementById('chatTitle').textContent = 'ForgeAgent';
+        document.getElementById('chatTitle').textContent = 'XF模具智能体平台';
         updateKbUploadVisibility();
     }
     renderMyAgents();
@@ -259,7 +262,7 @@ function toggleMyAgents() {
         updateKbUploadVisibility();
 
         // 更新标题
-        document.getElementById('chatTitle').textContent = currentMode === 'chat' ? 'Chat' : 'ForgeAgent';
+        document.getElementById('chatTitle').textContent = currentMode === 'chat' ? 'Chat' : 'XF模具智能体平台';
 
         // 刷新智能体列表（去掉active高亮）
         renderMyAgents();
@@ -373,9 +376,9 @@ function switchMode(mode) {
     if (titleEl) {
         if (mode === 'agent' && currentAgentId) {
             const agent = myAgents.find(a => a.id === currentAgentId);
-            titleEl.textContent = agent ? agent.name : 'ForgeAgent';
+            titleEl.textContent = agent ? agent.name : 'XF模具智能体平台';
         } else {
-            titleEl.textContent = mode === 'agent' ? 'ForgeAgent' : 'Chat';
+            titleEl.textContent = mode === 'agent' ? 'XF模具智能体平台' : 'Chat';
         }
     }
     // Reset agent when switching to chat mode
@@ -389,7 +392,7 @@ function switchMode(mode) {
 
     const welcomeH2 = document.querySelector('.welcome-center h2');
     const welcomeP = document.querySelector('.welcome-center p');
-    if (welcomeH2) welcomeH2.textContent = mode === 'agent' ? 'ForgeAgent' : 'Chat';
+    if (welcomeH2) welcomeH2.textContent = mode === 'agent' ? 'XF模具智能体平台' : 'Chat';
     if (welcomeP) {
         welcomeP.textContent = mode === 'agent'
             ? '智能体锻造引擎，让每个想法都能锻造出专属Agent。'
