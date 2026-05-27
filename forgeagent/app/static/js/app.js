@@ -626,6 +626,7 @@ async function doLogin() {
                 document.getElementById('loginModal').classList.remove('show');
                 document.getElementById('loginPage').classList.add('login-hidden');
                 document.getElementById('chatPage').style.display = 'flex';
+                document.body.classList.add('body-chat-mode');
                 document.getElementById('sidebarUsername').textContent = username;
                 document.getElementById('sidebarAvatar').textContent = username[0].toUpperCase();
                 loadChatList();
@@ -655,6 +656,7 @@ function doLogout() {
     localStorage.removeItem('authToken');
     document.getElementById('chatPage').style.display = 'none';
     document.getElementById('loginPage').classList.remove('login-hidden');
+    document.body.classList.remove('body-chat-mode');
     document.getElementById('chatMessages').innerHTML = '';
     document.getElementById('loginUser').value = '';
     document.getElementById('loginPass').value = '';
@@ -672,6 +674,7 @@ async function tryAutoLogin() {
             authToken = token;
             document.getElementById('loginPage').classList.add('login-hidden');
             document.getElementById('chatPage').style.display = 'flex';
+            document.body.classList.add('body-chat-mode');
             document.getElementById('sidebarUsername').textContent = data.username;
             document.getElementById('sidebarAvatar').textContent = data.username[0].toUpperCase();
             loadChatList();
@@ -1676,7 +1679,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
 
     // Landing page: smooth scroll for anchor links
-    document.querySelectorAll('.nav-link, .footer-links a').forEach(link => {
+    document.querySelectorAll('.nav-link, .footer-links a, .coze-footer-links a').forEach(link => {
         link.addEventListener('click', function(e) {
             const href = this.getAttribute('href');
             if (href && href.startsWith('#')) {
@@ -1691,4 +1694,18 @@ document.addEventListener('DOMContentLoaded', async function() {
             }
         });
     });
+
+    // Landing page: scroll-reveal animation with IntersectionObserver
+    const revealElements = document.querySelectorAll('.reveal');
+    if (revealElements.length > 0 && 'IntersectionObserver' in window) {
+        const revealObserver = new IntersectionObserver(function(entries) {
+            entries.forEach(function(entry) {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('visible');
+                    revealObserver.unobserve(entry.target);
+                }
+            });
+        }, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
+        revealElements.forEach(function(el) { revealObserver.observe(el); });
+    }
 });

@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>XF模具智能体平台 - AI智能体锻造平台</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/icon-96.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="/static/icons/icon-192.png">
+    <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
+    <link rel="manifest" href="/static/manifest.json">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="ForgeAgent">
+    <meta name="theme-color" content="#0C1629">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github.min.css">
+    <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+<div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebarMobile()"></div>
+<div class="toast" id="toast" role="alert" aria-live="polite"></div>
+
+<!-- ========== Landing Page ========== -->
+<div class="landing-page" id="loginPage" role="main" aria-label="产品介绍页">
+
+    <!-- Navigation -->
+    <nav class="landing-nav" id="landingNav">
+        <div class="nav-inner">
+            <div class="nav-brand">
+                <img class="nav-logo-img" src="/static/icons/icon-96.png" alt="XF模具智能体平台">
+                <span class="nav-title">XF模具智能体平台</span>
+            </div>
+            <div class="nav-links">
+                <a href="#features" class="nav-link">核心功能</a>
+                <a href="#capabilities" class="nav-link">锻造流程</a>
+                <a href="#scenarios" class="nav-link">应用场景</a>
+                <a href="#faq" class="nav-link">常见问题</a>
+            </div>
+            <div class="nav-actions">
+                <button class="btn-nav-install" id="pwaInstallBtn" onclick="installPWA()" aria-label="安装App" style="display:none;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    安装App
+                </button>
+                <a class="btn-nav-download" href="/static/DocAgent.apk" download="ForgeAgent.apk" aria-label="下载APP">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+                    下载APP
+                </a>
+                <button class="btn-nav-login" onclick="openLoginModal()" aria-label="登录">登录</button>
+                <button class="btn-nav-trial" onclick="openTrialModal()" aria-label="免费开始">免费开始</button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 1. Dark Hero Section -->
+    <section class="lp-hero">
+        <div class="lp-hero-grid"></div>
+        <div class="lp-hero-inner">
+            <div class="lp-hero-content reveal">
+                <div class="lp-hero-badge">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#06B6D4" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+                    AI-Powered Agent Forging Platform
+                </div>
+                <h1 class="lp-hero-title seri-font">XF模具智能体平台</h1>
+                <p class="lp-hero-subtitle">AI智能体锻造引擎，让每个想法都能锻造出专属Agent</p>
+                <p class="lp-hero-desc">将大语言模型与工具链深度融合，从想法到落地只需一次对话。定义角色、配置工具、设定规则，快速锻造出你专属的 AI 智能体，7×24 小时自主运行。</p>
+                <div class="lp-hero-cta">
+                    <button class="btn-hero-primary" onclick="openTrialModal()">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+                        开始锻造
+                    </button>
+                    <button class="btn-hero-secondary" onclick="openLoginModal()">登录工作台</button>
+                </div>
+            </div>
+            <div class="lp-hero-visual reveal">
+                <div class="hero-demo-card">
+                    <div class="demo-card-header">
+                        <span class="demo-dot" style="background:#EF4444;"></span>
+                        <span class="demo-dot" style="background:#06B6D4;"></span>
+                        <span class="demo-dot" style="background:#10B981;"></span>
+                        <span class="demo-title">XF模具智能体平台</span>
+                    </div>
+                    <div class="demo-card-body">
+                        <div class="demo-msg demo-msg-user">
+                            <span>帮我创建一个客服Agent，能自动回复常见问题并转接复杂工单</span>
+                        </div>
+                        <div class="demo-msg demo-msg-ai">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#06B6D4" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 12h8M12 8v8"/></svg>
+                            <span>已为您锻造「客服Agent」：1. 加载FAQ知识库 → 2. 配置自动回复规则 → 3. 设定工单转接阈值 → 4. 启用满意度评分。Agent已就绪，可立即部署上线。</span>
+                        </div>
+                        <div class="demo-tools">
+                            <span class="demo-tool demo-tool-active">角色定义</span>
+                            <span class="demo-tool demo-tool-active">工具配置</span>
+                            <span class="demo-tool">规则引擎</span>
+                            <span class="demo-tool">一键部署</span>
+                        </div>
+                        <div class="demo-success">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                            Agent已就绪，所有工具链已自动编排完成
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 2. Stats Bar -->
+    <section class="lp-stats">
+        <div class="lp-stats-inner">
+            <div class="lp-stat-item reveal">
+                <div class="lp-stat-number">10,000+</div>
+                <div class="lp-stat-label">Agents 已创建</div>
+            </div>
+            <div class="lp-stat-divider"></div>
+            <div class="lp-stat-item reveal">
+                <div class="lp-stat-number">500+</div>
+                <div class="lp-stat-label">企业用户</div>
+            </div>
+            <div class="lp-stat-divider"></div>
+            <div class="lp-stat-item reveal">
+                <div class="lp-stat-number">99.9%</div>
+                <div class="lp-stat-label">平台可用性</div>
+            </div>
+            <div class="lp-stat-divider"></div>
+            <div class="lp-stat-item reveal">
+                <div class="lp-stat-number">50+</div>
+                <div class="lp-stat-label">工具集成</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 3. Core Features -->
+    <section class="lp-features" id="features">
+        <div class="section-inner">
+            <div class="section-header reveal">
+                <h2 class="section-title seri-font">核心功能</h2>
+                <p class="section-desc">四大核心能力，让 AI Agent 从"想法"到"落地"一站闭环</p>
+            </div>
+            <div class="lp-features-grid">
+                <div class="lp-feature-card reveal">
+                    <div class="lp-feature-icon" style="--icon-color:#06B6D4;">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#06B6D4" stroke-width="2" stroke-linecap="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+                    </div>
+                    <h3 class="lp-feature-title">对话式锻造</h3>
+                    <p class="lp-feature-desc">用自然语言描述你的需求，系统自动解析角色、工具与规则，一次对话即可完成 Agent 定义，无需编写任何代码</p>
+                </div>
+                <div class="lp-feature-card reveal">
+                    <div class="lp-feature-icon" style="--icon-color:#2563EB;">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#2563EB" stroke-width="2" stroke-linecap="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+                    </div>
+                    <h3 class="lp-feature-title">工具链编排</h3>
+                    <p class="lp-feature-desc">内置知识库检索、联网搜索、数据分析等丰富工具，支持自定义 API 对接，Agent 可自主调用工具链完成复杂任务</p>
+                </div>
+                <div class="lp-feature-card reveal">
+                    <div class="lp-feature-icon" style="--icon-color:#10B981;">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>
+                    </div>
+                    <h3 class="lp-feature-title">自主推理执行</h3>
+                    <p class="lp-feature-desc">基于 ReAct 推理架构，Agent 能自主规划任务步骤、判断调用时机、处理异常情况，实现真正的自主决策与执行</p>
+                </div>
+                <div class="lp-feature-card reveal">
+                    <div class="lp-feature-icon" style="--icon-color:#8B5CF6;">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#8B5CF6" stroke-width="2" stroke-linecap="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                    </div>
+                    <h3 class="lp-feature-title">全链路可控</h3>
+                    <p class="lp-feature-desc">每次 Agent 调用的工具、推理路径与输出结果均可追溯审计，支持设定行为边界与安全策略，确保 Agent 始终可控可信</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 4. How It Works / Forging Process -->
+    <section class="lp-capabilities" id="capabilities">
+        <div class="section-inner">
+            <div class="section-header reveal">
+                <h2 class="section-title seri-font">锻造流程</h2>
+                <p class="section-desc">五步锻造，从需求到部署，让 Agent 精准匹配业务场景</p>
+            </div>
+            <div class="lp-flow">
+                <div class="lp-flow-step reveal">
+                    <div class="lp-flow-num">01</div>
+                    <div class="lp-flow-icon" style="background:rgba(6,182,212,0.1);border:1px solid rgba(6,182,212,0.3);">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#06B6D4" stroke-width="2" stroke-linecap="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                    </div>
+                    <h4>定义角色</h4>
+                    <p>自然语言描述 Agent 角色定位、专业领域与行为准则</p>
+                </div>
+                <div class="lp-flow-line reveal"><div class="lp-flow-line-inner"></div></div>
+                <div class="lp-flow-step reveal">
+                    <div class="lp-flow-num">02</div>
+                    <div class="lp-flow-icon" style="background:rgba(37,99,235,0.1);border:1px solid rgba(37,99,235,0.3);">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#2563EB" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                    </div>
+                    <h4>配置工具</h4>
+                    <p>选择知识库、搜索、数据分析等工具，或对接自定义 API</p>
+                </div>
+                <div class="lp-flow-line reveal"><div class="lp-flow-line-inner"></div></div>
+                <div class="lp-flow-step lp-flow-center reveal">
+                    <div class="lp-flow-num" style="color:#06B6D4;">03</div>
+                    <div class="lp-flow-icon" style="background:linear-gradient(135deg,#2563EB,#06B6D4);border:none;box-shadow:0 8px 24px rgba(6,182,212,0.3);">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+                    </div>
+                    <h4 style="color:#06B6D4;">ReAct 推理引擎</h4>
+                    <p>自主规划任务链路，串联工具调用与结果推理</p>
+                </div>
+                <div class="lp-flow-line reveal"><div class="lp-flow-line-inner"></div></div>
+                <div class="lp-flow-step reveal">
+                    <div class="lp-flow-num">04</div>
+                    <div class="lp-flow-icon" style="background:rgba(139,92,246,0.1);border:1px solid rgba(139,92,246,0.3);">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#8B5CF6" stroke-width="2" stroke-linecap="round"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                    </div>
+                    <h4>测试调优</h4>
+                    <p>模拟对话场景，验证 Agent 表现，迭代优化提示词与规则</p>
+                </div>
+                <div class="lp-flow-line reveal"><div class="lp-flow-line-inner"></div></div>
+                <div class="lp-flow-step reveal">
+                    <div class="lp-flow-num">05</div>
+                    <div class="lp-flow-icon" style="background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.3);">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="2" stroke-linecap="round"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                    </div>
+                    <h4>一键部署</h4>
+                    <p>Agent 即时上线，支持 API、Web、移动端等多渠道接入</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 5. Technology Stack -->
+    <section class="lp-techstack">
+        <div class="section-inner">
+            <div class="section-header reveal">
+                <h2 class="section-title seri-font">技术底座</h2>
+                <p class="section-desc">四大技术支柱，构建企业级 AI Agent 基础设施</p>
+            </div>
+            <div class="lp-tech-grid">
+                <div class="lp-tech-card reveal">
+                    <div class="lp-tech-icon">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#06B6D4" stroke-width="1.8"><path d="M12 2a10 10 0 110 20 10 10 0 010-20z"/><path d="M2 12h20"/><path d="M12 2a15 15 0 014 10 15 15 0 01-4 10 15 15 0 01-4-10 15 15 0 014-10z"/></svg>
+                    </div>
+                    <h3>LLM 引擎</h3>
+                    <p>多模型适配层，支持 GPT-4、Claude、Gemini 等主流大模型，智能路由最优模型</p>
+                    <div class="lp-tech-tags">
+                        <span>GPT-4</span><span>Claude</span><span>Gemini</span>
+                    </div>
+                </div>
+                <div class="lp-tech-card reveal">
+                    <div class="lp-tech-icon">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#2563EB" stroke-width="1.8"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+                    </div>
+                    <h3>ReAct 框架</h3>
+                    <p>推理-行动循环架构，Agent 自主规划任务链路，动态选择工具，实现复杂任务分解</p>
+                    <div class="lp-tech-tags">
+                        <span>推理</span><span>规划</span><span>反思</span>
+                    </div>
+                </div>
+                <div class="lp-tech-card reveal">
+                    <div class="lp-tech-icon">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="1.8"><path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/></svg>
+                    </div>
+                    <h3>向量数据库</h3>
+                    <p>企业知识库向量化存储与检索，RAG 增强生成，确保 Agent 回答精准可靠</p>
+                    <div class="lp-tech-tags">
+                        <span>RAG</span><span>Embedding</span><span>语义检索</span>
+                    </div>
+                </div>
+                <div class="lp-tech-card reveal">
+                    <div class="lp-tech-icon">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#8B5CF6" stroke-width="1.8"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+                    </div>
+                    <h3>工具链</h3>
+                    <p>50+ 内置工具与自定义 API 插件，Agent 可自主调用完成搜索、分析、生成等任务</p>
+                    <div class="lp-tech-tags">
+                        <span>搜索</span><span>API</span><span>代码执行</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 6. Application Scenarios -->
+    <section class="lp-scenarios" id="scenarios">
+        <div class="section-inner">
+            <div class="section-header reveal">
+                <h2 class="section-title seri-font">应用场景</h2>
+                <p class="section-desc">一个 Agent，无限可能——覆盖企业核心业务场景</p>
+            </div>
+            <div class="lp-scenarios-grid">
+                <div class="lp-scenario-card reveal">
+                    <div class="lp-scenario-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#06B6D4" stroke-width="1.8" stroke-linecap="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg></div>
+                    <h4 class="lp-scenario-title">智能客服 Agent</h4>
+                    <p class="lp-scenario-desc">7×24 小时自动应答，精准匹配 FAQ，复杂问题自动转接人工，附带满意度追踪</p>
+                </div>
+                <div class="lp-scenario-card reveal">
+                    <div class="lp-scenario-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#2563EB" stroke-width="1.8" stroke-linecap="round"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg></div>
+                    <h4 class="lp-scenario-title">财务审计 Agent</h4>
+                    <p class="lp-scenario-desc">自动核验报销单据，比对政策法规，生成审计报告与合规风险提示</p>
+                </div>
+                <div class="lp-scenario-card reveal">
+                    <div class="lp-scenario-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="1.8" stroke-linecap="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/><path d="M9 15l2 2 4-4"/></svg></div>
+                    <h4 class="lp-scenario-title">法务合同 Agent</h4>
+                    <p class="lp-scenario-desc">自动提取合同关键条款，比对历史模板识别异常，生成风险提示与修改建议</p>
+                </div>
+                <div class="lp-scenario-card reveal">
+                    <div class="lp-scenario-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#8B5CF6" stroke-width="1.8" stroke-linecap="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg></div>
+                    <h4 class="lp-scenario-title">HR 助理 Agent</h4>
+                    <p class="lp-scenario-desc">全天候解答假期、薪酬、福利等问题，自动筛选简历，安排面试日程</p>
+                </div>
+                <div class="lp-scenario-card reveal">
+                    <div class="lp-scenario-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#06B6D4" stroke-width="1.8" stroke-linecap="round"><path d="M18 20V10M12 20V4M6 20v-6"/></svg></div>
+                    <h4 class="lp-scenario-title">数据分析师 Agent</h4>
+                    <p class="lp-scenario-desc">上传数据表格，自动完成趋势分析、异常检测、指标提炼与可视化解读</p>
+                </div>
+                <div class="lp-scenario-card reveal">
+                    <div class="lp-scenario-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="1.8" stroke-linecap="round"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg></div>
+                    <h4 class="lp-scenario-title">运维监控 Agent</h4>
+                    <p class="lp-scenario-desc">实时监控系统指标，自动诊断故障根因，触发告警与自愈脚本执行</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 7. Testimonials -->
+    <section class="lp-testimonials">
+        <div class="section-inner">
+            <div class="section-header reveal">
+                <h2 class="section-title seri-font">用户评价</h2>
+                <p class="section-desc">来自企业用户的真实反馈</p>
+            </div>
+            <div class="lp-testimonials-grid">
+                <div class="lp-testimonial-card reveal">
+                    <div class="lp-testimonial-quote">"</div>
+                    <p class="lp-testimonial-text">ForgeAgent 让我们的客服团队效率提升了 3 倍，Agent 自动处理了 80% 的常见问题，大幅降低了人工成本。</p>
+                    <div class="lp-testimonial-author">
+                        <div class="lp-testimonial-avatar">张</div>
+                        <div>
+                            <div class="lp-testimonial-name">张明远</div>
+                            <div class="lp-testimonial-role">某电商平台 · 客服总监</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="lp-testimonial-card reveal">
+                    <div class="lp-testimonial-quote">"</div>
+                    <p class="lp-testimonial-text">对话式创建 Agent 太方便了，5 分钟就能搭建一个专业的法务助手，合同审查效率提升了 5 倍以上。</p>
+                    <div class="lp-testimonial-author">
+                        <div class="lp-testimonial-avatar">李</div>
+                        <div>
+                            <div class="lp-testimonial-name">李思涵</div>
+                            <div class="lp-testimonial-role">某律所 · 技术合伙人</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="lp-testimonial-card reveal">
+                    <div class="lp-testimonial-quote">"</div>
+                    <p class="lp-testimonial-text">ReAct 推理引擎让 Agent 真正做到了自主决策，运维告警的自动处理率达到了 92%，极大地解放了工程师的时间。</p>
+                    <div class="lp-testimonial-author">
+                        <div class="lp-testimonial-avatar">王</div>
+                        <div>
+                            <div class="lp-testimonial-name">王建国</div>
+                            <div class="lp-testimonial-role">某科技公司 · SRE 负责人</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 8. FAQ Section -->
+    <section class="lp-faq" id="faq">
+        <div class="section-inner">
+            <div class="lp-faq-layout">
+                <div class="lp-faq-left reveal">
+                    <h2 class="lp-faq-title seri-font">常见问题</h2>
+                    <p class="lp-faq-subtitle">关于 XF模具智能体平台，你可能想知道的</p>
+                </div>
+                <div class="lp-faq-right reveal">
+                    <div class="lp-faq-item" onclick="toggleFaq(this)">
+                        <div class="lp-faq-q"><span>创建一个 Agent 需要多长时间？</span><svg class="lp-faq-arrow" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#64748B" stroke-width="2" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg></div>
+                        <div class="lp-faq-a"><p>通过对话式锻造，5 分钟即可完成一个基础 Agent 的创建。系统会自动解析你的需求，推荐合适的工具与规则模板，无需编写任何代码。复杂场景的深度调优可能需要额外 1-2 小时的迭代测试。</p></div>
+                    </div>
+                    <div class="lp-faq-item" onclick="toggleFaq(this)">
+                        <div class="lp-faq-q"><span>Agent 的行为是否安全可控？</span><svg class="lp-faq-arrow" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#64748B" stroke-width="2" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg></div>
+                        <div class="lp-faq-a"><p>完全可控。XF模具智能体平台 内置安全护栏机制，你可以为 Agent 设定行为边界、输出规则与敏感词过滤。每次 Agent 的工具调用、推理路径与输出结果均有完整日志，支持全链路追溯审计。</p></div>
+                    </div>
+                    <div class="lp-faq-item" onclick="toggleFaq(this)">
+                        <div class="lp-faq-q"><span>支持哪些工具和集成？</span><svg class="lp-faq-arrow" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#64748B" stroke-width="2" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg></div>
+                        <div class="lp-faq-a"><p>内置知识库检索、联网搜索、数据分析、文档生成等核心工具。企业版支持通过 RESTful API 对接企业内部系统（如 CRM、ERP、OA），也可自定义 Python/Node.js 工具插件，实现深度集成。</p></div>
+                    </div>
+                    <div class="lp-faq-item" onclick="toggleFaq(this)">
+                        <div class="lp-faq-q"><span>Agent 能同时处理多个任务吗？</span><svg class="lp-faq-arrow" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#64748B" stroke-width="2" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg></div>
+                        <div class="lp-faq-a"><p>可以。XF模具智能体平台的 ReAct 推理引擎支持多步任务自动拆解与并行执行。Agent 会根据任务复杂度自主规划执行链路，串联多个工具调用，最终汇总结果交付。</p></div>
+                    </div>
+                    <div class="lp-faq-item" onclick="toggleFaq(this)">
+                        <div class="lp-faq-q"><span>免费版和企业版有什么区别？</span><svg class="lp-faq-arrow" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#64748B" stroke-width="2" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg></div>
+                        <div class="lp-faq-a"><p>免费版可创建 3 个 Agent，每日 20 次对话，适合个人体验评估。个人版支持 50 个 Agent 与每日 200 次对话，解锁联网搜索与深度思考。企业版不限 Agent 数量与对话次数，支持私有化部署、API 集成与专属技术支持。</p></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 9. Pricing Section -->
+    <section class="lp-pricing" id="pricing">
+        <div class="lp-pricing-inner">
+            <div class="section-header reveal">
+                <h2 class="section-title seri-font">选择适合您的方案</h2>
+                <p class="section-desc">从个人探索到企业级部署，灵活满足不同规模需求</p>
+            </div>
+            <div class="lp-pricing-cards">
+                <!-- 试用版 -->
+                <div class="lp-pricing-card reveal">
+                    <div class="lp-pricing-card-header">
+                        <div class="lp-pricing-card-icon trial-icon">
+                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                        </div>
+                        <h3 class="lp-pricing-card-name">试用版</h3>
+                        <p class="lp-pricing-card-sub">零门槛体验锻造能力</p>
+                    </div>
+                    <div class="lp-pricing-card-price">
+                        <span class="price-amount">免费</span>
+                    </div>
+                    <ul class="lp-pricing-card-features">
+                        <li class="feature-item"><svg class="feature-check" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>3 个 Agent</li>
+                        <li class="feature-item"><svg class="feature-check" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>每日 20 次对话</li>
+                        <li class="feature-item"><svg class="feature-check" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>基础知识库问答</li>
+                        <li class="feature-item"><svg class="feature-check" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>对话式 Agent 创建</li>
+                        <li class="feature-item disabled"><svg class="feature-cross" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>Agent 多步推理</li>
+                        <li class="feature-item disabled"><svg class="feature-cross" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>联网搜索</li>
+                        <li class="feature-item disabled"><svg class="feature-cross" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>API 接口调用</li>
+                    </ul>
+                    <button class="lp-pricing-card-btn trial-btn" onclick="openTrialModal()">免费试用</button>
+                </div>
+
+                <!-- 个人版 -->
+                <div class="lp-pricing-card featured reveal">
+                    <div class="lp-pricing-badge">最受欢迎</div>
+                    <div class="lp-pricing-card-header">
+                        <div class="lp-pricing-card-icon personal-icon">
+                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                        </div>
+                        <h3 class="lp-pricing-card-name">个人版</h3>
+                        <p class="lp-pricing-card-sub">高效锻造专属 Agent</p>
+                    </div>
+                    <div class="lp-pricing-card-price">
+                        <span class="price-currency">¥</span><span class="price-amount">29</span><span class="price-period">/月</span>
+                    </div>
+                    <ul class="lp-pricing-card-features">
+                        <li class="feature-item"><svg class="feature-check" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>50 个 Agent</li>
+                        <li class="feature-item"><svg class="feature-check" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>每日 200 次对话</li>
+                        <li class="feature-item"><svg class="feature-check" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>Agent 多步推理</li>
+                        <li class="feature-item"><svg class="feature-check" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>联网搜索</li>
+                        <li class="feature-item"><svg class="feature-check" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>深度思考模式</li>
+                        <li class="feature-item"><svg class="feature-check" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>Android APP</li>
+                        <li class="feature-item disabled"><svg class="feature-cross" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>API 接口调用</li>
+                    </ul>
+                    <button class="lp-pricing-card-btn personal-btn" onclick="openTrialModal()">立即订阅</button>
+                </div>
+
+                <!-- 企业版 -->
+                <div class="lp-pricing-card reveal">
+                    <div class="lp-pricing-card-header">
+                        <div class="lp-pricing-card-icon enterprise-icon">
+                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                        </div>
+                        <h3 class="lp-pricing-card-name">企业版</h3>
+                        <p class="lp-pricing-card-sub">全功能 + 私有部署</p>
+                    </div>
+                    <div class="lp-pricing-card-price">
+                        <span class="price-amount">定制</span>
+                    </div>
+                    <ul class="lp-pricing-card-features">
+                        <li class="feature-item"><svg class="feature-check" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>无限 Agent</li>
+                        <li class="feature-item"><svg class="feature-check" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>无限对话次数</li>
+                        <li class="feature-item"><svg class="feature-check" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>全部工具链</li>
+                        <li class="feature-item"><svg class="feature-check" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>API 接口调用</li>
+                        <li class="feature-item"><svg class="feature-check" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>GitHub / 邮件 / 数据库</li>
+                        <li class="feature-item"><svg class="feature-check" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>私有化部署</li>
+                        <li class="feature-item"><svg class="feature-check" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>专属技术支持</li>
+                    </ul>
+                    <button class="lp-pricing-card-btn enterprise-btn" onclick="openTrialModal()">联系销售</button>
+                </div>
+            </div>
+            <p class="lp-pricing-note">所有方案均支持 14 天无理由退款 · Agent 行为全链路审计 · 7×24 小时监控</p>
+        </div>
+    </section>
+
+    <!-- 10. CTA Section -->
+    <section class="lp-cta">
+        <div class="lp-cta-inner reveal">
+            <h2 class="lp-cta-title seri-font">开始锻造你的第一个 AI Agent</h2>
+            <p class="lp-cta-desc">5 分钟创建，7×24 运行，从想法到落地一步到位</p>
+            <div class="lp-cta-btns">
+                <button class="btn-hero-primary" onclick="openTrialModal()">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+                    免费开始
+                </button>
+                <button class="btn-hero-secondary" onclick="openLoginModal()">登录工作台</button>
+            </div>
+        </div>
+    </section>
+
+    <!-- 11. Footer -->
+    <footer class="lp-footer">
+        <div class="lp-footer-inner">
+            <div class="lp-footer-brand">
+                <img class="nav-logo-img" src="/static/icons/icon-96.png" alt="XF模具智能体平台">
+                <span class="lp-footer-name">XF模具智能体平台</span>
+            </div>
+            <div class="lp-footer-links">
+                <a href="#features">核心功能</a>
+                <a href="#capabilities">锻造流程</a>
+                <a href="#scenarios">应用场景</a>
+                <a href="#faq">常见问题</a>
+                <a href="#pricing">定价方案</a>
+            </div>
+            <div class="lp-footer-copy">&copy; 2025 XF模具智能体平台. All rights reserved.</div>
+        </div>
+    </footer>
+
+</div><!-- /landing-page -->
+
+<!-- ========== Login Modal ========== -->
+<div class="modal-overlay" id="loginModal" role="dialog" aria-label="登录" aria-modal="true">
+    <div class="login-modal">
+        <button class="modal-close-btn" onclick="closeLoginModal()" aria-label="关闭">&times;</button>
+        <div class="login-modal-inner">
+            <div class="login-modal-header">
+                <img class="login-logo" src="/static/icons/icon-96.png" alt="ForgeAgent">
+                <h3 id="loginModalTitle">登录智能体工作台</h3>
+                <p class="login-subtitle" id="loginModalSubtitle">登录您的账号以继续</p>
+            </div>
+            <div class="login-modal-body">
+                <div class="tab-bar" role="tablist">
+                    <div class="tab active" onclick="switchTab('login')" role="tab" aria-selected="true" tabindex="0">登录</div>
+                    <div class="tab" onclick="switchTab('register')" role="tab" aria-selected="false" tabindex="0">注册</div>
+                </div>
+                <div id="loginForm" role="tabpanel">
+                    <div class="form-group"><label for="loginUser">用户名</label><input type="text" id="loginUser" placeholder="输入用户名" autocomplete="username"></div>
+                    <div class="form-group"><label for="loginPass">密码</label><input type="password" id="loginPass" placeholder="输入密码" onkeydown="if(event.key==='Enter')doLogin()" autocomplete="current-password"></div>
+                    <button class="btn btn-login" onclick="doLogin()" aria-label="登录">登 录</button>
+                    <div class="msg-box" id="loginMsg" role="status" aria-live="polite"></div>
+                </div>
+                <div id="registerForm" style="display:none" role="tabpanel">
+                    <div class="form-group"><label for="regUser">用户名</label><input type="text" id="regUser" placeholder="至少2个字符" autocomplete="username"></div>
+                    <div class="form-group"><label for="regPass">密码</label><input type="password" id="regPass" placeholder="至少4个字符" onkeydown="if(event.key==='Enter')doRegister()" autocomplete="new-password"></div>
+                    <button class="btn btn-login" onclick="doRegister()" aria-label="注册">注 册</button>
+                    <div class="msg-box" id="regMsg" role="status" aria-live="polite"></div>
+                </div>
+            </div>
+            <div class="split-divider"><span>或</span></div>
+            <button class="split-sso-btn" type="button"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>企业SSO单点登录 (SAML/OIDC)</button>
+            <div class="split-bottom-links"><a href="javascript:void(0)">忘记密码?</a><span class="split-link-sep">|</span><a href="javascript:void(0)">联系IT管理员</a></div>
+        </div>
+    </div>
+</div>
+
+<!-- Chat Page -->
+<div class="chat-page" id="chatPage" role="main">
+    <aside class="sidebar" id="sidebar" role="navigation" aria-label="对话列表">
+        <div class="sidebar-header">
+            <div class="sidebar-brand" id="sidebarBrand"><img class="sidebar-brand-icon" src="/static/icons/icon-96.png" alt="ForgeAgent"><span class="sidebar-brand-name">ForgeAgent</span></div>
+            <div class="mode-switcher-box" id="modeSwitcherBox" role="radiogroup" aria-label="模式切换">
+                <button class="mode-btn" id="modeChat" onclick="switchMode('chat')" role="radio" aria-checked="false" aria-label="Chat模式"><span class="mode-icon">💬</span><span class="mode-label">Chat</span></button>
+                <button class="mode-btn active" id="modeAgent" onclick="switchMode('agent')" role="radio" aria-checked="true" aria-label="Agent模式"><span class="mode-icon">🤖</span><span class="mode-label">Agent</span></button>
+            </div>
+            <button class="forge-agent-btn" onclick="openAgentCreateModal()" aria-label="构建专属智能体">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+                <span>构建专属智能体</span>
+            </button>
+            <button class="new-chat-btn" onclick="createNewChat()" aria-label="新建对话"><span class="plus-icon">+</span><span>新建对话</span></button>
+            <div class="chat-search" id="chatSearch"><span class="search-icon">🔍</span><input type="text" id="chatSearchInput" placeholder="搜索对话..." oninput="filterChats(this.value)" aria-label="搜索对话"></div>
+        </div>
+        <div class="my-agents-section" id="myAgentsSection">
+                <div class="my-agents-header" onclick="toggleMyAgents()">
+                    <span class="my-agents-toggle" id="myAgentsToggle">&#9654;</span>
+                    <span class="my-agents-title">我的智能体</span>
+                    <span class="my-agents-count" id="myAgentsCount">0</span>
+                </div>
+                <div class="my-agents-list" id="myAgentsList"></div>
+            </div>
+            <div class="chat-list" id="chatList" role="list" aria-label="会话列表"></div>
+        <div class="sidebar-footer"><div class="user-avatar" id="sidebarAvatar" aria-hidden="true">U</div><div class="user-name" id="sidebarUsername">用户</div><button class="logout-btn" onclick="doLogout()" title="退出登录" aria-label="退出登录">⏻</button></div>
+    </aside>
+    <div class="chat-main">
+        <header class="chat-header">
+            <button class="toggle-sidebar-btn" onclick="toggleSidebar()" title="切换侧边栏" aria-label="切换侧边栏">☰</button>
+            <h1 id="chatTitle">ForgeAgent</h1>
+            <div class="header-actions">
+                <button class="header-btn" onclick="toggleTheme()" title="切换暗色/亮色模式" id="themeBtn" aria-label="切换主题">🌙</button>
+                <select class="model-select" id="modelSelect" onchange="switchModel()" title="切换模型" aria-label="选择模型"></select>
+                <div class="export-wrapper"><button class="header-btn" onclick="toggleExportDropdown()" title="导出对话" aria-label="导出对话" aria-haspopup="true">📥 导出</button><div class="export-dropdown" id="exportDropdown" role="menu"><button onclick="exportChat('md')" role="menuitem">📝 Markdown</button><button onclick="exportChat('pdf')" role="menuitem">📄 PDF</button></div></div>
+                <div class="export-wrapper"><button class="header-btn stats-btn" onclick="toggleStatsPanel()" title="使用统计" aria-label="使用统计" aria-haspopup="true">📊 统计</button><div class="stats-panel" id="statsPanel"><h4>使用统计</h4><div class="stats-grid"><div class="stats-card"><div class="stats-value" id="statTotalMsg">0</div><div class="stats-label">总消息数</div></div><div class="stats-card"><div class="stats-value" id="statTodayMsg">0</div><div class="stats-label">今日消息</div></div><div class="stats-card"><div class="stats-value" id="statTotalSessions">0</div><div class="stats-label">总会话数</div></div><div class="stats-card"><div class="stats-value" id="statActive7d">0</div><div class="stats-label">7日活跃用户</div></div></div><div class="stats-trend"><span>近7日趋势</span><div class="trend-bar" id="statTrendBars"></div></div></div></div>
+                <button class="header-btn danger" onclick="clearCurrentChat()" aria-label="清除当前对话">清除当前</button>
+            </div>
+        </header>
+        <div class="chat-content centered" id="chatContent">
+            <div class="welcome-center" id="welcomeCenter"><h2>ForgeAgent</h2><p>智能体锻造引擎，让每个想法都能锻造出专属Agent。</p><div class="quick-actions"><span class="quick-action" onclick="sendQuick('帮我创建一个客服Agent')" role="button" tabindex="0">创建客服Agent</span><span class="quick-action" onclick="sendQuick('知识库有哪些文档？')" role="button" tabindex="0">知识库文档</span><span class="quick-action" onclick="sendQuick('列出所有员工信息')" role="button" tabindex="0">员工信息</span><span class="quick-action" onclick="sendQuick('帮我分析这份数据')" role="button" tabindex="0">数据分析</span></div></div>
+            <div class="chat-messages" id="chatMessages" role="log" aria-label="对话消息" aria-live="polite"></div>
+            <button class="scroll-bottom-btn" id="scrollBottomBtn" onclick="scrollToBottom()" title="滚动到底部" aria-label="滚动到底部">↓</button>
+            <div class="typing-indicator" id="typingIndicator" aria-hidden="true"><div style="display:flex;align-items:center;gap:12px;"><div class="dots"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div></div></div>
+            <div class="chat-input-area"><div class="input-container"><div class="file-bar" id="fileBar"><span id="fileIcon">📎</span><span class="file-name" id="fileName"></span><span class="remove-file" onclick="removeFile()" role="button" aria-label="移除文件">✕</span></div><div class="agent-kb-bar" id="agentKbBar" style="display:none;">
+                    <span class="kb-bar-icon">📚</span>
+                    <span class="kb-bar-text">知识库上传模式</span>
+                    <span class="kb-bar-hint">下一个文件将上传到当前智能体的专属知识库</span>
+                    <span class="kb-bar-remove" onclick="toggleAgentKbUpload()" role="button" aria-label="关闭">✕</span>
+                </div>
+            <div class="input-top"><textarea id="msgInput" rows="1" placeholder="输入问题，或粘贴/拖拽文件..." onkeydown="handleKey(event)" oninput="autoResize(this)" aria-label="输入消息"></textarea><div class="send-btn-wrap"><button class="icon-btn send" id="sendBtn" onclick="sendMessage()" title="发送" aria-label="发送消息">➤</button><button class="icon-btn stop" id="stopBtn" onclick="stopGeneration()" title="停止生成" style="display:none;" aria-label="停止生成">■</button></div></div><div class="input-toolbar"><button class="toolbar-btn" onclick="document.getElementById('fileInput').click()" title="上传文件或图片" aria-label="上传文件">📎</button><button class="toolbar-btn kb-upload-btn" id="kbUploadToggle" onclick="toggleAgentKbUpload()" title="上传到智能体知识库" aria-label="上传到知识库">📚</button><button class="web-search-toggle" id="webSearchToggle" onclick="toggleWebSearch()" title="开启/关闭联网搜索" aria-label="联网搜索" aria-pressed="false"><span class="toggle-icon">🌐</span><span class="toggle-label">联网搜索</span></button><button class="deep-think-toggle" id="deepThinkToggle" onclick="toggleDeepThink()" title="开启/关闭深度思考" aria-label="深度思考" aria-pressed="false"><span class="toggle-icon">🧠</span><span class="toggle-label">深度思考</span></button></div></div></div>
+        </div>
+        <input type="file" id="fileInput" accept=".pdf,.txt,.docx,.png,.jpg,.jpeg,.gif,.bmp,.webp,.csv,.xlsx,.xls,.doc,.ppt,.pptx,.md,.json,.py,.js,.html,.css" onchange="onFileSelected(event)" aria-hidden="true">
+    </div>
+</div>
+
+<!-- Agent Create Modal -->
+<div class="modal-overlay" id="agentCreateModal" role="dialog" aria-label="创建智能体" aria-modal="true">
+    <div class="agent-create-modal">
+        <button class="modal-close-btn" onclick="closeAgentCreateModal()" aria-label="关闭">&times;</button>
+        <div class="agent-create-inner">
+            <div class="agent-create-header">
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#2563EB" stroke-width="1.8" stroke-linecap="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+                <h3>构建专属智能体</h3>
+                <p>定义角色与任务，快速锻造你的AI助手</p>
+            </div>
+            <div class="agent-create-body">
+                <div class="form-group">
+                    <label for="agentName">智能体名称</label>
+                    <input type="text" id="agentName" placeholder="如：客服助手、数据分析师" maxlength="20">
+                </div>
+                <div class="form-group">
+                    <label for="agentTask">任务描述</label>
+                    <textarea id="agentTask" rows="4" placeholder="描述智能体的职责与行为规则，如：负责回答客户关于产品的常见问题，遇到复杂问题自动转接人工客服"></textarea>
+                </div>
+            </div>
+            <div class="agent-create-footer">
+                <button class="btn btn-cancel" onclick="closeAgentCreateModal()">取消</button>
+                <button class="btn btn-forge" onclick="createAgent()">开始锻造</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Knowledge Base Modal -->
+<div class="modal-overlay" id="docsModal" role="dialog" aria-label="知识库管理" aria-modal="true">
+    <div class="modal"><h3>知识库管理</h3><div class="upload-section" id="uploadZone" onclick="document.getElementById('kbFileInput').click()" role="button" aria-label="上传文档"><div class="upload-icon">📤</div><div class="upload-text">点击或拖拽文件到此处 <strong>上传到知识库</strong></div><div class="upload-hint">支持 PDF、TXT、DOCX 格式</div></div><input type="file" id="kbFileInput" accept=".pdf,.txt,.docx" onchange="onKbFileSelected(event)" multiple aria-hidden="true"><div class="upload-progress" id="uploadProgress" role="progressbar"><div class="progress-file" id="progressFileName">正在上传...</div><div class="progress-bar-bg"><div class="progress-bar-fill" id="progressBarFill"></div></div><div class="progress-status" id="progressStatus">上传中...</div></div><div class="divider">已索引文档</div><div class="doc-list" id="docList" role="list"><div class="doc-empty">加载中...</div></div><button class="btn btn-primary close-btn" onclick="closeDocs()" aria-label="关闭">关闭</button></div>
+</div>
+
+<!-- Rename Overlay -->
+<div class="rename-overlay" id="renameOverlay" role="dialog" aria-label="重命名对话" aria-modal="true">
+    <div class="rename-card"><h3>重命名对话</h3><input type="text" id="renameInput" placeholder="输入新名称" onkeydown="if(event.key==='Enter')confirmRename()" aria-label="新名称"><div class="rename-btns"><button class="cancel-btn" onclick="cancelRename()" aria-label="取消">取消</button><button class="confirm-btn" onclick="confirmRename()" aria-label="确认重命名">确认</button></div></div>
+</div>
+
+<script>
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function() {
+        navigator.serviceWorker.register('/static/sw.js').then(function(reg) {
+            console.log('SW registered:', reg.scope);
+            reg.addEventListener('updatefound', function() {
+                var newWorker = reg.installing;
+                newWorker.addEventListener('statechange', function() {
+                    if (newWorker.state === 'installed' && navigator.serviceWorker.controller) { console.log('New SW available'); }
+                });
+            });
+        }).catch(function(err) { console.warn('SW registration failed:', err); });
+    });
+}
+let deferredPrompt = null;
+window.addEventListener('beforeinstallprompt', function(e) {
+    e.preventDefault(); deferredPrompt = e;
+    var installBtn = document.getElementById('pwaInstallBtn');
+    if (installBtn) installBtn.style.display = 'flex';
+});
+function installPWA() {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    deferredPrompt.userChoice.then(function(choice) {
+        if (choice.outcome === 'accepted') showToast('ForgeAgent 已添加到桌面');
+        deferredPrompt = null;
+        var installBtn = document.getElementById('pwaInstallBtn');
+        if (installBtn) installBtn.style.display = 'none';
+    });
+}
+</script>
+<script>
+function toggleFaq(el) {
+    const isActive = el.classList.contains('active');
+    document.querySelectorAll('.lp-faq-item').forEach(function(item) { item.classList.remove('active'); });
+    if (!isActive) el.classList.add('active');
+}
+</script>
+<script src="/static/js/app.js"></script>
+</body>
+</html>
