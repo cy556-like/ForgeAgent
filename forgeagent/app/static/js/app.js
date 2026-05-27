@@ -660,7 +660,7 @@ async function doLogin() {
             currentUser = username;
             if (data.token) { authToken = data.token; localStorage.setItem('authToken', data.token); }
             msgEl.className = 'msg-box success'; msgEl.textContent = '登录成功！';
-            setTimeout(() => {
+            setTimeout(async () => {
                 document.getElementById('loginModal').classList.remove('show');
                 document.getElementById('loginPage').classList.add('login-hidden');
                 document.getElementById('chatPage').style.display = 'flex';
