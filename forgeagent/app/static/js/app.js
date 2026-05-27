@@ -257,6 +257,7 @@ function renderMyAgents() {
                 <div class="agent-item-name">${escapeHtml(agent.name)}</div>
                 <div class="agent-item-task">${escapeHtml(agent.task)}</div>
             </div>
+            <button class="agent-action-btn edit" onclick="event.stopPropagation(); openAgentEditModal('${agent.id}')" title="编辑提示词" aria-label="编辑智能体">✏</button>
         `;
         list.appendChild(item);
     });
