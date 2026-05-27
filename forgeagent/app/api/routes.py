@@ -23,7 +23,7 @@ from fastapi.responses import StreamingResponse, Response
 from pydantic import BaseModel
 
 from app.agent.core import chat, chat_stream_generator, chat_stream_generator_multimodal, reset_agent
-from app.rag.document import index_document, search_documents, list_indexed_documents, delete_document, update_document, delete_agent_collection, list_all_collections, load_document, export_document_as_docx
+from app.rag.document import index_document, search_documents, list_indexed_documents, delete_document, update_document, delete_agent_collection, list_all_collections, load_document, export_document_as_docx, reindex_all_documents
 from app.auth.user_manager import login_user, register_user
 from app.auth.jwt_handler import create_token, verify_token, get_username_from_token
 from app.memory.manager import (
@@ -916,6 +916,25 @@ async def debug_collections():
     """诊断接口：列出所有 ChromaDB collection 及其文档数"""
     collections = list_all_collections()
     return {"collections": collections}
+
+
+@router.post("/reindex", summary="重建知识库索引（切换embedding模型后使用）")
+async def reindex_knowledge(agent_id: str = Query(None, description="智能体ID，为空时重建全局知识库")):
+    """
+    重建指定知识库的所有文档索引。
+    
+    切换embedding模型后（如从智谱embedding-3切换到本地bge-large-zh-v1.5），
+    旧的向量数据维度不同，必须重建索引才能正常使用向量搜索。
+    
+    此接口会：
+    1. 记录旧collection中的文档列表
+    2. 删除旧collection
+    3. 用新的embedding模型重新索引所有文档
+    """
+    result = reindex_all_documents(agent_id=agent_id)
+    if result["status"] == "error":
+        raise HTTPException(status_code=500, detail=result["message"])
+    return {"status": "success", "detail": result}
 
 
 @router.get("/migrate/cleanup-collections", summary="清理异常的 ChromaDB collection")

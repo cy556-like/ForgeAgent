@@ -14,15 +14,14 @@ from typing import Optional
 
 from langchain_community.document_loaders import PyPDFLoader, TextLoader, Docx2txtLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_openai import OpenAIEmbeddings
 from langchain_community.vectorstores import Chroma
 
 from app.config import settings
 
 logger = logging.getLogger(__name__)
 
-# Embedding API 单次最大批量数（智谱限制 64 条）
-EMBEDDING_BATCH_SIZE = 50
+# 本地 Embedding 批量大小（本地模型无API限制，可适当增大）
+EMBEDDING_BATCH_SIZE = 100
 
 # ===== 单例模式：复用 Embedding 和 ChromaDB 连接 =====
 _embeddings_instance = None
@@ -31,18 +30,56 @@ _vector_store_cache = {}  # agent_id -> ChromaDB instance（按智能体隔离�
 # 全局知识库的 collection 名称
 GLOBAL_COLLECTION_NAME = "langchain"
 
+# Embedding 提供者配置："local" 使用本地免费模型，"openai" 使用云端API（消耗额度）
+EMBEDDING_PROVIDER = os.environ.get("EMBEDDING_PROVIDER", "local")
+LOCAL_EMBEDDING_MODEL = os.environ.get("LOCAL_EMBEDDING_MODEL", "BAAI/bge-large-zh-v1.5")
+
 
 def get_embeddings():
-    """获取 Embedding 模型（单例复用，避免重复初始化）"""
+    """获取 Embedding 模型（单例复用，避免重复初始化）
+    
+    支持两种模式：
+    - local（默认）：使用本地 BAAI/bge-large-zh-v1.5，永久免费，离线可用，中文质量顶级
+    - openai：使用智谱 embedding-3 云端API，消耗额度，需联网
+    
+    通过环境变量 EMBEDDING_PROVIDER 切换：local / openai
+    """
     global _embeddings_instance
     if _embeddings_instance is None:
-        embedding_model = getattr(settings, 'EMBEDDING_MODEL', 'embedding-3')
-        _embeddings_instance = OpenAIEmbeddings(
-            api_key=settings.LLM_API_KEY,
-            base_url=settings.LLM_BASE_URL,
-            model=embedding_model,
-        )
-        logger.info(f"Embedding 模型已初始化: {embedding_model}")
+        provider = os.environ.get("EMBEDDING_PROVIDER", EMBEDDING_PROVIDER)
+        
+        if provider == "local":
+            # ===== 本地 Embedding（免费，离线，中文顶级）=====
+            try:
+                from langchain_huggingface import HuggingFaceEmbeddings
+                model_name = os.environ.get("LOCAL_EMBEDDING_MODEL", LOCAL_EMBEDDING_MODEL)
+                logger.info(f"正在加载本地 Embedding 模型: {model_name}（首次运行会自动下载，约1.2GB）...")
+                _embeddings_instance = HuggingFaceEmbeddings(
+                    model_name=model_name,
+                    model_kwargs={"device": "cpu"},
+                    encode_kwargs={"normalize_embeddings": True},
+                )
+                logger.info(f"本地 Embedding 模型加载完成: {model_name}")
+            except ImportError:
+                logger.error("langchain-huggingface 未安装，请运行: pip install langchain-huggingface sentence-transformers")
+                logger.info("回退到 OpenAI Embedding...")
+                provider = "openai"
+            except Exception as e:
+                logger.error(f"本地 Embedding 加载失败: {e}")
+                logger.info("回退到 OpenAI Embedding...")
+                provider = "openai"
+        
+        if provider == "openai":
+            # ===== 云端 API Embedding（消耗额度，需联网）=====
+            from langchain_openai import OpenAIEmbeddings
+            embedding_model = getattr(settings, 'EMBEDDING_MODEL', 'embedding-3')
+            _embeddings_instance = OpenAIEmbeddings(
+                api_key=settings.LLM_API_KEY,
+                base_url=settings.LLM_BASE_URL,
+                model=embedding_model,
+            )
+            logger.info(f"Embedding 模型已初始化（云端API）: {embedding_model}")
+    
     return _embeddings_instance
 
 
@@ -90,6 +127,75 @@ def reset_vector_store():
     _vector_store_cache.clear()
     _embeddings_instance = None
     logger.info("向量数据库单例已重置")
+
+
+def reindex_all_documents(agent_id: str = None):
+    """重建指定知识库的所有文档索引（切换embedding模型后调用）
+    
+    当从 OpenAI Embedding 切换到本地 Embedding 时，
+    旧向量数据的维度不同，需要删除旧collection并重新索引。
+    
+    Args:
+        agent_id: 智能体ID，为None时重建全局知识库
+    
+    Returns:
+        dict: 包含重建结果
+    """
+    import chromadb
+    collection_name = _get_collection_name(agent_id)
+    
+    try:
+        # 1. 获取旧collection中的所有文档文件名
+        client = chromadb.PersistentClient(path=settings.CHROMA_DIR)
+        existing_collections = [c.name for c in client.list_collections()]
+        
+        document_files = []
+        if collection_name in existing_collections:
+            collection = client.get_collection(collection_name)
+            all_docs = collection.get(include=["metadatas"])
+            for meta in (all_docs.get("metadatas") or []):
+                if meta and "source_file" in meta:
+                    document_files.append(meta["source_file"])
+            document_files = list(set(document_files))
+            
+            # 2. 删除旧collection
+            client.delete_collection(collection_name)
+            logger.info(f"已删除旧collection: {collection_name}")
+        
+        # 3. 清除缓存，让新的embedding生效
+        cache_key = agent_id or "__global__"
+        if cache_key in _vector_store_cache:
+            del _vector_store_cache[cache_key]
+        
+        # 4. 重新索引所有文档
+        reindexed = []
+        failed = []
+        for filename in document_files:
+            file_path = os.path.join(settings.DOCUMENTS_DIR, filename)
+            if os.path.exists(file_path):
+                try:
+                    result = index_document(file_path, filename, agent_id=agent_id)
+                    reindexed.append(filename)
+                    logger.info(f"重新索引成功: {filename}, {result.get('chunks', 0)} 个分块")
+                except Exception as e:
+                    failed.append(f"{filename}: {str(e)}")
+                    logger.error(f"重新索引失败: {filename}, {e}")
+            else:
+                failed.append(f"{filename}: 文件不存在")
+        
+        return {
+            "status": "success",
+            "collection": collection_name,
+            "documents_found": len(document_files),
+            "reindexed": len(reindexed),
+            "failed": failed,
+            "message": f"知识库重建完成: 找到{len(document_files)}个文档，成功索引{len(reindexed)}个" + (f"，失败{len(failed)}个" if failed else "")
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"重建知识库失败: {str(e)}"
+        }
 
 
 def load_document(file_path: str) -> list:
