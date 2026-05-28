@@ -127,10 +127,17 @@ async function syncAgentsFromServer() {
     // 从服务器拉取最新智能体数据并合并（保留本地 chat_ids）
     if (!currentUser || !authToken) return;
     try {
-        // Strip chat_ids before sending to server, but include updated_at
+        // Only send agents that have been locally edited (have updated_at)
+        const localAgents = JSON.parse(localStorage.getItem('forgeAgents') || '[]');
+        const localMap = {};
+        localAgents.forEach(a => { localMap[a.id] = a; });
+        
+        // Build agents to send: always send, but local edits get priority
         const agentsForServer = myAgents.map(a => ({
-            id: a.id, name: a.name, task: a.task, mode: a.mode, created_at: a.created_at, updated_at: a.updated_at
+            id: a.id, name: a.name, task: a.task, mode: a.mode, 
+            created_at: a.created_at, updated_at: a.updated_at
         }));
+        
         const resp = await fetch('/api/v1/agents/sync', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
@@ -138,11 +145,6 @@ async function syncAgentsFromServer() {
         });
         const data = await resp.json();
         if (data.success && data.agents) {
-            // Preserve local chat_ids when merging server data, use timestamp-based comparison
-            const localAgents = JSON.parse(localStorage.getItem('forgeAgents') || '[]');
-            const localMap = {};
-            localAgents.forEach(a => { localMap[a.id] = a; });
-
             const mergedAgents = data.agents.map(serverAgent => {
                 const local = localMap[serverAgent.id];
                 if (!local) return { ...serverAgent, chat_ids: [] };
@@ -151,17 +153,17 @@ async function syncAgentsFromServer() {
                     ...serverAgent,
                     name: useServer ? serverAgent.name : (local.name || serverAgent.name),
                     task: useServer ? serverAgent.task : (local.task || serverAgent.task),
+                    updated_at: useServer ? (serverAgent.updated_at || null) : (local.updated_at || null),
                     chat_ids: local.chat_ids || []
                 };
             });
-
             myAgents = filterAgents(mergedAgents);
             localStorage.setItem('forgeAgents', JSON.stringify(myAgents));
-            console.log(`[智能体同步] 成功: 共${data.total}个, 新增${data.added}, 更新${data.updated}`);
         }
 
-        // BUG FIX: Rebuild chat_ids from server data to restore agent-chat associations
+        // Rebuild chat_ids from server data
         await rebuildChatIdsFromServer();
+        renderAgentList();
     } catch (e) {
         console.warn('[智能体同步失败]', e);
     }
@@ -173,6 +175,7 @@ async function rebuildChatIdsFromServer() {
     try {
         const resp = await fetch(`/api/v1/chats?username=${encodeURIComponent(currentUser)}`, { headers: apiHeaders() });
         const data = await resp.json();
+        console.log('[rebuildChatIds] server chats:', data);
         if (data.success && data.chats) {
             const serverChats = data.chats;
             myAgents.forEach(agent => {
@@ -180,13 +183,14 @@ async function rebuildChatIdsFromServer() {
                 const matchingChatIds = serverChats
                     .filter(chat => chat.agent_id === agent.id)
                     .map(chat => chat.chat_id);
-                // Merge: add any new server chat_ids, don't remove local-only ones
+                console.log(`[rebuildChatIds] Agent ${agent.name} (${agent.id}): found ${matchingChatIds.length} chats`);
+                // Merge: add any new server chat_ids
                 const existingIds = new Set(agent.chat_ids || []);
                 matchingChatIds.forEach(id => existingIds.add(id));
                 agent.chat_ids = Array.from(existingIds);
             });
             localStorage.setItem('forgeAgents', JSON.stringify(myAgents));
-            console.log('[rebuildChatIds] Rebuilt chat_ids from server for all agents');
+            console.log('[rebuildChatIds] Rebuilt chat_ids from server');
         }
     } catch (e) {
         console.warn('[rebuildChatIds失败]', e);
@@ -1780,25 +1784,28 @@ async function loadKbDocs() {
     try {
         const resp = await fetch(`/api/v1/documents?agent_id=${encodeURIComponent(currentAgentId)}`, { headers: apiHeaders() });
         const data = await resp.json();
-        console.log('[KB] documents response:', data);
-        // Handle multiple possible response formats
-        const docs = data.documents || data.files || (Array.isArray(data) ? data : []);
+        console.log('[KB] loadKbDocs response:', JSON.stringify(data));
+        // Handle multiple response formats - docs can be strings or objects
+        let docs = data.documents || data.files || [];
+        if (!Array.isArray(docs)) docs = [];
+        // Extract filenames from objects if needed
+        docs = docs.map(d => typeof d === 'string' ? d : (d.filename || d.name || d.title || String(d)));
+        
         if (docs.length === 0) {
             listEl.innerHTML = '<div class="kb-empty">暂无文档，点击上方按钮上传</div>';
             return;
         }
-        let html = `<div class="kb-doc-count">共 ${docs.length} 个文档</div>`;
-        docs.forEach(doc => {
-            const docName = typeof doc === 'string' ? doc : (doc.filename || doc.name || doc.title || '');
+        let html = '<div class="kb-doc-count">共 ' + docs.length + ' 个文档</div>';
+        docs.forEach(docName => {
             const ext = docName.split('.').pop().toLowerCase();
             const icon = ext === 'pdf' ? '📕' : ext === 'docx' ? '📘' : '📄';
-            html += `<div class="kb-doc-item">
-                <div class="kb-doc-info">
-                    <span class="kb-doc-icon">${icon}</span>
-                    <span class="kb-doc-name" title="${escapeHtml(docName)}">${escapeHtml(docName)}</span>
-                </div>
-                <button class="kb-doc-delete" onclick="deleteKbDoc('${docName.replace(/'/g, "\\'")}')" title="删除文档">🗑️</button>
-            </div>`;
+            html += '<div class="kb-doc-item">' +
+                '<div class="kb-doc-info">' +
+                '<span class="kb-doc-icon">' + icon + '</span>' +
+                '<span class="kb-doc-name" title="' + escapeHtml(docName) + '">' + escapeHtml(docName) + '</span>' +
+                '</div>' +
+                '<button class="kb-doc-delete" onclick="deleteKbDoc(\'' + docName.replace(/'/g, "\\'") + '\')" title="删除文档">🗑️</button>' +
+                '</div>';
         });
         listEl.innerHTML = html;
     } catch (e) {
