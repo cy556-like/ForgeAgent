@@ -97,7 +97,7 @@ async function saveAgents() {
             });
             const data = await resp.json();
             if (data.success && data.agents && data.agents.length > 0) {
-                // Merge: preserve local chat_ids, use timestamp-based comparison for name/task
+                // Merge: preserve local chat_ids, use timestamp-based comparison for name/task/updated_at
                 const localAgents = JSON.parse(localStorage.getItem('forgeAgents') || '[]');
                 const localMap = {};
                 localAgents.forEach(a => { localMap[a.id] = a; });
@@ -109,6 +109,7 @@ async function saveAgents() {
                         ...serverAgent,
                         name: useServer ? serverAgent.name : (local.name || serverAgent.name),
                         task: useServer ? serverAgent.task : (local.task || serverAgent.task),
+                        updated_at: useServer ? (serverAgent.updated_at || null) : (local.updated_at || null),
                         chat_ids: local.chat_ids || []
                     };
                 });
@@ -125,30 +126,29 @@ async function saveAgents() {
 
 async function syncAgentsFromServer() {
     // 从服务器拉取最新智能体数据并合并（保留本地 chat_ids）
+    // 修复跨浏览器同步：先GET服务器数据，再与本地比较，只有本地更新时才POST
     if (!currentUser || !authToken) return;
     try {
-        // Only send agents that have been locally edited (have updated_at)
-        const localAgents = JSON.parse(localStorage.getItem('forgeAgents') || '[]');
-        const localMap = {};
-        localAgents.forEach(a => { localMap[a.id] = a; });
-        
-        // Build agents to send: always send, but local edits get priority
-        const agentsForServer = myAgents.map(a => ({
-            id: a.id, name: a.name, task: a.task, mode: a.mode, 
-            created_at: a.created_at, updated_at: a.updated_at
-        }));
-        
-        const resp = await fetch('/api/v1/agents/sync', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
-            body: JSON.stringify({ agents: agentsForServer })
+        // Step 1: GET 服务器最新数据（不发送本地数据，避免旧数据覆盖服务器）
+        const getResp = await fetch('/api/v1/agents', {
+            method: 'GET',
+            headers: { 'Authorization': 'Bearer ' + authToken }
         });
-        const data = await resp.json();
-        if (data.success && data.agents) {
-            const mergedAgents = data.agents.map(serverAgent => {
+        const getData = await getResp.json();
+        
+        if (getData.success && getData.agents && getData.agents.length > 0) {
+            const serverAgents = getData.agents;
+            const localAgents = JSON.parse(localStorage.getItem('forgeAgents') || '[]');
+            const localMap = {};
+            localAgents.forEach(a => { localMap[a.id] = a; });
+            
+            // Step 2: 比较时间戳，合并数据
+            let localHasNewer = false;
+            const mergedAgents = serverAgents.map(serverAgent => {
                 const local = localMap[serverAgent.id];
                 if (!local) return { ...serverAgent, chat_ids: [] };
                 const useServer = _resolveMergeDirection(local, serverAgent);
+                if (!useServer) localHasNewer = true; // 本地有更新的数据
                 return {
                     ...serverAgent,
                     name: useServer ? serverAgent.name : (local.name || serverAgent.name),
@@ -157,8 +157,26 @@ async function syncAgentsFromServer() {
                     chat_ids: local.chat_ids || []
                 };
             });
+            
             myAgents = filterAgents(mergedAgents);
             localStorage.setItem('forgeAgents', JSON.stringify(myAgents));
+            
+            // Step 3: 只有本地有更新数据时才POST到服务器
+            if (localHasNewer) {
+                const agentsForServer = myAgents.map(a => ({
+                    id: a.id, name: a.name, task: a.task, mode: a.mode, 
+                    created_at: a.created_at, updated_at: a.updated_at
+                }));
+                try {
+                    await fetch('/api/v1/agents/sync', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
+                        body: JSON.stringify({ agents: agentsForServer })
+                    });
+                } catch (postErr) {
+                    console.warn('[智能体POST同步失败]', postErr);
+                }
+            }
         }
 
         // Rebuild chat_ids from server data
@@ -1943,34 +1961,8 @@ document.addEventListener('DOMContentLoaded', async function() {
     // Sync agents when tab becomes visible (cross-browser prompt sync)
     document.addEventListener('visibilitychange', async function() {
         if (!document.hidden && currentUser && authToken) {
-            try {
-                const resp = await fetch('/api/v1/agents/sync', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
-                    body: JSON.stringify({ agents: myAgents.map(a => ({ id: a.id, name: a.name, task: a.task, mode: a.mode, created_at: a.created_at, updated_at: a.updated_at })) })
-                });
-                const data = await resp.json();
-                if (data.success && data.agents) {
-                    const localAgents = JSON.parse(localStorage.getItem('forgeAgents') || '[]');
-                    const localMap = {};
-                    localAgents.forEach(a => { localMap[a.id] = a; });
-                    const mergedAgents = data.agents.map(serverAgent => {
-                        const local = localMap[serverAgent.id];
-                        if (!local) return { ...serverAgent, chat_ids: [] };
-                        const useServer = _resolveMergeDirection(local, serverAgent);
-                        return {
-                            ...serverAgent,
-                            name: useServer ? serverAgent.name : (local.name || serverAgent.name),
-                            task: useServer ? serverAgent.task : (local.task || serverAgent.task),
-                            updated_at: useServer ? (serverAgent.updated_at || null) : (local.updated_at || null),
-                            chat_ids: local.chat_ids || []
-                        };
-                    });
-                    myAgents = filterAgents(mergedAgents);
-                    localStorage.setItem('forgeAgents', JSON.stringify(myAgents));
-                    renderMyAgents();
-                }
-            } catch (e) { console.warn('[Tab sync failed]', e); }
+            // 使用与 syncAgentsFromServer 相同的 GET-first 策略
+            await syncAgentsFromServer();
         }
     });
 
