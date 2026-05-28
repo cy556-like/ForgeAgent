@@ -32,6 +32,7 @@ from app.memory.manager import (
 )
 from app.config import settings, AVAILABLE_MODELS, get_current_model, set_current_model
 from app.utils.stats import record_message, record_session, get_stats
+from app.agent.storage import sync_agents as storage_sync_agents, load_agents as storage_load_agents
 
 logger = logging.getLogger(__name__)
 
@@ -962,6 +963,49 @@ async def health_detailed():
         "checks": checks,
         "timestamp": time.time(),
     }
+
+
+# ===== 智能体同步接口 =====
+
+class AgentSyncItem(BaseModel):
+    id: str
+    name: str = ""
+    task: str = ""
+    mode: str = "agent"
+    created_at: float = None
+    updated_at: float = None
+
+class AgentSyncRequest(BaseModel):
+    agents: list = []
+
+@router.post("/agents/sync", summary="同步智能体数据")
+async def agents_sync(req: AgentSyncRequest, authorization: str = Header(None)):
+    """
+    同步智能体数据到服务端（按agent_id合并，updated_at较新的优先）
+    用于跨浏览器/跨设备同步智能体prompt编辑
+    """
+    username = None
+    if authorization and authorization.startswith("Bearer "):
+        username = get_username_from_token(authorization[7:])
+    if not username:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    result = storage_sync_agents(username, req.agents)
+    return {"success": True, "agents": result["agents"], "synced": result.get("synced", 0), "updated": result.get("updated", 0)}
+
+@router.get("/agents", summary="获取用户智能体列表")
+async def get_agents(authorization: str = Header(None)):
+    """
+    获取当前用户的智能体列表
+    """
+    username = None
+    if authorization and authorization.startswith("Bearer "):
+        username = get_username_from_token(authorization[7:])
+    if not username:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    agents = storage_load_agents(username)
+    return {"success": True, "agents": agents}
 
 
 # ===== 智能体知识库管理接口 =====
