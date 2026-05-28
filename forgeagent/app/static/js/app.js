@@ -43,6 +43,7 @@ function forceCorrectAgents() {
             mode: 'agent',
             icon: id === 'xf-rd-agent' ? '🔧' : '✅',
             created_at: ex ? (ex.created_at || Date.now() / 1000) : Date.now() / 1000,
+            updated_at: ex ? (ex.updated_at || null) : null,
             chat_ids: ex ? (ex.chat_ids || []) : []
         };
     });
@@ -75,7 +76,7 @@ async function saveAgents() {
     if (currentUser && authToken) {
         try {
             const agentsForServer = myAgents.map(a => ({
-                id: a.id, name: a.name, task: a.task, mode: a.mode, created_at: a.created_at
+                id: a.id, name: a.name, task: a.task, mode: a.mode, created_at: a.created_at, updated_at: a.updated_at
             }));
             const resp = await fetch('/api/v1/agents/sync', {
                 method: 'POST',
@@ -84,17 +85,22 @@ async function saveAgents() {
             });
             const data = await resp.json();
             if (data.success && data.agents && data.agents.length > 0) {
-                // Merge: preserve local chat_ids when server data comes back
+                // Merge: preserve local chat_ids, use timestamp-based comparison for name/task
                 const localAgents = JSON.parse(localStorage.getItem('forgeAgents') || '[]');
                 const localMap = {};
                 localAgents.forEach(a => { localMap[a.id] = a; });
                 const mergedAgents = data.agents.map(serverAgent => {
                     const local = localMap[serverAgent.id];
+                    if (!local) return { ...serverAgent, chat_ids: [] };
+                    // Compare timestamps: if server is newer, use server's name/task; if local is newer, use local's
+                    const localTime = local.updated_at || local.created_at || 0;
+                    const serverTime = serverAgent.updated_at || serverAgent.created_at || 0;
+                    const useServer = serverTime > localTime;
                     return {
                         ...serverAgent,
-                        name: local ? (local.name || serverAgent.name) : serverAgent.name,
-                        task: local ? (local.task || serverAgent.task) : serverAgent.task,
-                        chat_ids: local ? (local.chat_ids || []) : []
+                        name: useServer ? serverAgent.name : (local.name || serverAgent.name),
+                        task: useServer ? serverAgent.task : (local.task || serverAgent.task),
+                        chat_ids: local.chat_ids || []
                     };
                 });
                 myAgents = filterAgents(mergedAgents);
@@ -112,9 +118,9 @@ async function syncAgentsFromServer() {
     // 从服务器拉取最新智能体数据并合并（保留本地 chat_ids）
     if (!currentUser || !authToken) return;
     try {
-        // Strip chat_ids before sending to server
+        // Strip chat_ids before sending to server, but include updated_at
         const agentsForServer = myAgents.map(a => ({
-            id: a.id, name: a.name, task: a.task, mode: a.mode, created_at: a.created_at
+            id: a.id, name: a.name, task: a.task, mode: a.mode, created_at: a.created_at, updated_at: a.updated_at
         }));
         const resp = await fetch('/api/v1/agents/sync', {
             method: 'POST',
@@ -123,18 +129,23 @@ async function syncAgentsFromServer() {
         });
         const data = await resp.json();
         if (data.success && data.agents) {
-            // Preserve local chat_ids when merging server data
+            // Preserve local chat_ids when merging server data, use timestamp-based comparison
             const localAgents = JSON.parse(localStorage.getItem('forgeAgents') || '[]');
             const localMap = {};
             localAgents.forEach(a => { localMap[a.id] = a; });
 
             const mergedAgents = data.agents.map(serverAgent => {
                 const local = localMap[serverAgent.id];
+                if (!local) return { ...serverAgent, chat_ids: [] };
+                // Compare timestamps: if server is newer, use server's name/task; if local is newer, use local's
+                const localTime = local.updated_at || local.created_at || 0;
+                const serverTime = serverAgent.updated_at || serverAgent.created_at || 0;
+                const useServer = serverTime > localTime;
                 return {
                     ...serverAgent,
-                    name: local ? (local.name || serverAgent.name) : serverAgent.name,
-                    task: local ? (local.task || serverAgent.task) : serverAgent.task,
-                    chat_ids: local ? (local.chat_ids || []) : []
+                    name: useServer ? serverAgent.name : (local.name || serverAgent.name),
+                    task: useServer ? serverAgent.task : (local.task || serverAgent.task),
+                    chat_ids: local.chat_ids || []
                 };
             });
 
@@ -308,6 +319,7 @@ async function saveAgentEdit() {
 
     agent.name = name;
     agent.task = task;
+    agent.updated_at = Date.now() / 1000;  // Update timestamp for cross-browser sync
     saveAgents();
 
     // 更新标题（如果正在编辑当前选中的智能体）
@@ -1730,21 +1742,24 @@ async function loadKbDocs() {
     try {
         const resp = await fetch(`/api/v1/documents?agent_id=${encodeURIComponent(currentAgentId)}`, { headers: apiHeaders() });
         const data = await resp.json();
-        const docs = data.documents || [];
+        console.log('[KB] documents response:', data);
+        // Handle multiple possible response formats
+        const docs = data.documents || data.files || (Array.isArray(data) ? data : []);
         if (docs.length === 0) {
             listEl.innerHTML = '<div class="kb-empty">暂无文档，点击上方按钮上传</div>';
             return;
         }
         let html = `<div class="kb-doc-count">共 ${docs.length} 个文档</div>`;
         docs.forEach(doc => {
-            const ext = doc.split('.').pop().toLowerCase();
+            const docName = typeof doc === 'string' ? doc : (doc.filename || doc.name || doc.title || '');
+            const ext = docName.split('.').pop().toLowerCase();
             const icon = ext === 'pdf' ? '📕' : ext === 'docx' ? '📘' : '📄';
             html += `<div class="kb-doc-item">
                 <div class="kb-doc-info">
                     <span class="kb-doc-icon">${icon}</span>
-                    <span class="kb-doc-name" title="${escapeHtml(doc)}">${escapeHtml(doc)}</span>
+                    <span class="kb-doc-name" title="${escapeHtml(docName)}">${escapeHtml(docName)}</span>
                 </div>
-                <button class="kb-doc-delete" onclick="deleteKbDoc('${escapeHtml(doc)}')" title="删除文档">🗑️</button>
+                <button class="kb-doc-delete" onclick="deleteKbDoc('${docName.replace(/'/g, "\\'")}')" title="删除文档">🗑️</button>
             </div>`;
         });
         listEl.innerHTML = html;
