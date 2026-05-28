@@ -562,22 +562,14 @@
     <aside class="sidebar" id="sidebar" role="navigation" aria-label="对话列表">
         <div class="sidebar-header">
             <div class="sidebar-brand" id="sidebarBrand"><img class="sidebar-brand-icon" src="/static/icons/icon-96.png" alt="ForgeAgent"><span class="sidebar-brand-name">ForgeAgent</span></div>
+            <div class="sidebar-agents-list" id="myAgentsList"></div>
             <div class="mode-switcher-box" id="modeSwitcherBox" role="radiogroup" aria-label="模式切换">
                 <button class="mode-btn" id="modeChat" onclick="switchMode('chat')" role="radio" aria-checked="false" aria-label="Chat模式"><span class="mode-icon">💬</span><span class="mode-label">Chat</span></button>
                 <button class="mode-btn active" id="modeAgent" onclick="switchMode('agent')" role="radio" aria-checked="true" aria-label="Agent模式"><span class="mode-icon">🤖</span><span class="mode-label">Agent</span></button>
             </div>
-
             <button class="new-chat-btn" onclick="createNewChat()" aria-label="新建对话"><span class="plus-icon">+</span><span>新建对话</span></button>
             <div class="chat-search" id="chatSearch"><span class="search-icon">🔍</span><input type="text" id="chatSearchInput" placeholder="搜索对话..." oninput="filterChats(this.value)" aria-label="搜索对话"></div>
         </div>
-        <div class="my-agents-section" id="myAgentsSection">
-                <div class="my-agents-header" onclick="toggleMyAgents()">
-                    <span class="my-agents-toggle" id="myAgentsToggle">&#9654;</span>
-                    <span class="my-agents-title">我的智能体</span>
-                    <span class="my-agents-count" id="myAgentsCount">0</span>
-                </div>
-                <div class="my-agents-list" id="myAgentsList"></div>
-            </div>
             <div class="chat-list" id="chatList" role="list" aria-label="会话列表"></div>
         <div class="sidebar-footer"><div class="user-avatar" id="sidebarAvatar" aria-hidden="true">U</div><div class="user-name" id="sidebarUsername">用户</div><button class="logout-btn" onclick="doLogout()" title="退出登录" aria-label="退出登录">⏻</button></div>
     </aside>
@@ -589,7 +581,7 @@
                 <button class="header-btn" onclick="toggleTheme()" title="切换暗色/亮色模式" id="themeBtn" aria-label="切换主题">🌙</button>
                 <select class="model-select" id="modelSelect" onchange="switchModel()" title="切换模型" aria-label="选择模型"></select>
                 <div class="export-wrapper"><button class="header-btn" onclick="toggleExportDropdown()" title="导出对话" aria-label="导出对话" aria-haspopup="true">📥 导出</button><div class="export-dropdown" id="exportDropdown" role="menu"><button onclick="exportChat('md')" role="menuitem">📝 Markdown</button><button onclick="exportChat('pdf')" role="menuitem">📄 PDF</button></div></div>
-                
+                <div class="export-wrapper"><button class="header-btn kb-btn" onclick="toggleKbPanel()" title="知识库" aria-label="知识库" aria-haspopup="true">📚 知识库</button><div class="kb-panel" id="kbPanel"><div class="kb-panel-header"><h4>知识库</h4><span class="kb-agent-name" id="kbAgentName">未选择智能体</span></div><div class="kb-panel-upload"><button class="kb-upload-btn" onclick="document.getElementById('headerKbFileInput').click()">📤 上传文档</button><input type="file" id="headerKbFileInput" accept=".pdf,.txt,.docx" onchange="uploadKbDoc(this)" style="display:none"></div><div class="kb-panel-list" id="kbDocList"><div class="kb-empty">加载中...</div></div></div></div>
                 <button class="header-btn danger" onclick="clearCurrentChat()" aria-label="清除当前对话">清除当前</button>
             </div>
         </header>
@@ -611,6 +603,34 @@
 </div>
 
 
+
+<!-- Agent Edit Modal -->
+<div class="modal-overlay" id="agentEditModal" role="dialog" aria-label="编辑智能体" aria-modal="true">
+    <div class="agent-create-modal">
+        <button class="modal-close-btn" onclick="closeAgentEditModal()" aria-label="关闭">&times;</button>
+        <div class="agent-create-inner">
+            <div class="agent-create-header">
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#2563EB" stroke-width="1.8" stroke-linecap="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                <h3>编辑智能体</h3>
+                <p>修改智能体名称与提示词</p>
+            </div>
+            <div class="agent-create-body">
+                <div class="form-group">
+                    <label for="editAgentName">智能体名称</label>
+                    <input type="text" id="editAgentName" placeholder="智能体名称" maxlength="30">
+                </div>
+                <div class="form-group">
+                    <label for="editAgentTask">提示词 / 任务描述</label>
+                    <textarea id="editAgentTask" rows="6" placeholder="描述智能体的职责与行为规则"></textarea>
+                </div>
+            </div>
+            <div class="agent-create-footer">
+                <button class="btn btn-cancel" onclick="closeAgentEditModal()">取消</button>
+                <button class="btn btn-forge" onclick="saveAgentEdit()">保存修改</button>
+            </div>
+        </div>
+    </div>
+</div>
 
 <!-- Knowledge Base Modal -->
 <div class="modal-overlay" id="docsModal" role="dialog" aria-label="知识库管理" aria-modal="true">
