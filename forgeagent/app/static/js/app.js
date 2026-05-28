@@ -423,6 +423,7 @@ function toggleAgentKbUpload() {
     }
     agentKbUploadMode = !agentKbUploadMode;
     document.getElementById('kbUploadToggle').classList.toggle('active', agentKbUploadMode);
+    document.getElementById('kbUploadToggle').setAttribute('aria-pressed', agentKbUploadMode);
     document.getElementById('agentKbBar').style.display = agentKbUploadMode ? 'flex' : 'none';
 }
 
@@ -1413,9 +1414,13 @@ async function sendMessage() {
         showTyping(true);
         const formData = new FormData();
         formData.append('file', selectedFile);
-        // 知识库模式：📚激活时文件存入智能体知识库
-        if (agentKbUploadMode && currentAgentId) {
+        // Always pass agent_id when an agent is selected, not just when KB mode is on
+        if (currentAgentId) {
             formData.append('agent_id', currentAgentId);
+        }
+        // 知识库模式：📚激活时文件存入知识库
+        if (agentKbUploadMode && currentAgentId) {
+            formData.append('store_to_kb', 'true');
         }
         try {
             const resp = await fetch('/api/v1/upload', { method: 'POST', body: formData, headers: authToken ? { 'Authorization': 'Bearer ' + authToken } : {} });
