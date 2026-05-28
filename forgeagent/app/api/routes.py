@@ -479,6 +479,34 @@ async def list_documents(
 ):
     """获取知识库中所有文档列表（支持分页，按智能体隔离）"""
     docs = list_indexed_documents(agent_id=agent_id)
+
+    # BUG FIX: Filesystem fallback - scan DOCUMENTS_DIR for files not in ChromaDB
+    # When ChromaDB has no records (e.g. embedding unavailable), files on disk should still appear
+    doc_extensions = {'.pdf', '.txt', '.docx', '.csv', '.xlsx', '.xls', '.doc', '.ppt', '.pptx', '.md', '.py', '.js', '.html', '.css', '.json'}
+    chromadb_filenames = set()
+    for doc in docs:
+        if isinstance(doc, dict) and doc.get('filename'):
+            chromadb_filenames.add(doc['filename'])
+        elif isinstance(doc, str):
+            chromadb_filenames.add(doc)
+
+    if os.path.exists(settings.DOCUMENTS_DIR):
+        for fname in os.listdir(settings.DOCUMENTS_DIR):
+            ext = os.path.splitext(fname)[1].lower()
+            if ext in doc_extensions and fname not in chromadb_filenames:
+                file_path = os.path.join(settings.DOCUMENTS_DIR, fname)
+                if os.path.isfile(file_path):
+                    try:
+                        file_stat = os.stat(file_path)
+                        docs.append({
+                            'filename': fname,
+                            'source': 'filesystem',
+                            'size': file_stat.st_size,
+                            'modified': file_stat.st_mtime,
+                        })
+                    except OSError:
+                        pass
+
     total = len(docs)
     # 分页
     start = (page - 1) * page_size
@@ -654,9 +682,9 @@ async def get_chats(
 
 
 @router.post("/chats", summary="创建新会话")
-async def create_chat_api(username: str, title: str = "新对话", mode: str = "agent"):
-    """为用户创建一个新的会话（支持指定模式）"""
-    chat_info = create_chat(username, title, mode=mode)
+async def create_chat_api(username: str, title: str = "新对话", mode: str = "agent", agent_id: str = None):
+    """为用户创建一个新的会话（支持指定模式和智能体关联）"""
+    chat_info = create_chat(username, title, mode=mode, agent_id=agent_id)
     record_session()
     return {"success": True, "chat": chat_info}
 
