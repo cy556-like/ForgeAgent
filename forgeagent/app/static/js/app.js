@@ -276,6 +276,7 @@ function deleteAgent(agentId) {
         modeChatId['agent'] = null;
         document.getElementById('chatTitle').textContent = 'XF模具智能体平台';
         updateKbUploadVisibility();
+        updateHeaderKbVisibility();
     }
     renderMyAgents();
     loadChatList();
@@ -298,6 +299,7 @@ async function switchToAgent(agentId) {
 
     // 更新知识库按钮可见性（选中智能体时显示📚）
     updateKbUploadVisibility();
+    updateHeaderKbVisibility();
 
     // Render agents list
     renderMyAgents();
@@ -394,7 +396,21 @@ function toggleMyAgents() {
     // This function kept for compatibility but does nothing
 }
 
-// ===== Agent KB Upload Toggle =====
+// ===== Agent KB Upload Toggle & Header KB Button Visibility =====
+function updateHeaderKbVisibility() {
+    const wrapper = document.getElementById('headerKbWrapper');
+    if (!wrapper) return;
+    // 只在 agent 模式 且 选中了某个智能体 时才显示 header 知识库按钮
+    if (currentMode === 'agent' && currentAgentId) {
+        wrapper.style.display = '';
+    } else {
+        wrapper.style.display = 'none';
+        // 同时关闭知识库面板
+        const panel = document.getElementById('kbPanel');
+        if (panel) panel.classList.remove('show');
+    }
+}
+
 function updateKbUploadVisibility() {
     const kbBtn = document.getElementById('kbUploadToggle');
     // 只在 agent 模式 且 选中了某个智能体 时才显示知识库上传按钮
@@ -539,6 +555,7 @@ function switchMode(mode) {
 
     // 更新知识库上传按钮可见性
     updateKbUploadVisibility();
+    updateHeaderKbVisibility();
 
     const welcomeH2 = document.querySelector('.welcome-center h2');
     const welcomeP = document.querySelector('.welcome-center p');
@@ -611,6 +628,7 @@ function getModeChats() {
     }
     // 初始化时根据状态决定知识库按钮可见性
     updateKbUploadVisibility();
+    updateHeaderKbVisibility();
 })();
 
 // ===== Deep Think Toggle =====
@@ -831,6 +849,7 @@ async function doLogin() {
                 await rebuildChatIdsFromServer();
                 renderMyAgents();
                 updateKbUploadVisibility();
+                updateHeaderKbVisibility();
             }, 500);
         } else { msgEl.className = 'msg-box error'; msgEl.textContent = data.message || '登录失败'; }
     } catch (e) { msgEl.className = 'msg-box error'; msgEl.textContent = '网络错误'; }
@@ -858,6 +877,7 @@ function doLogout() {
     document.getElementById('chatMessages').innerHTML = '';
     document.getElementById('loginUser').value = '';
     document.getElementById('loginPass').value = '';
+    updateHeaderKbVisibility();
 }
 
 // ===== Auto-login with JWT token =====
@@ -881,6 +901,7 @@ async function tryAutoLogin() {
             await rebuildChatIdsFromServer();
             renderMyAgents();
             updateKbUploadVisibility();
+            updateHeaderKbVisibility();
             return true;
         }
     } catch (e) { console.warn('自动登录失败', e); }
@@ -1004,6 +1025,7 @@ async function switchChat(chatId) {
     }
 
     renderChatList();
+    updateHeaderKbVisibility();
     await loadChatHistory(chatId);
 }
 
