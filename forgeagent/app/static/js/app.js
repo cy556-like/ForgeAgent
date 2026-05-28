@@ -321,7 +321,6 @@ function renderMyAgents() {
             <div class="agent-item-icon">${initial}</div>
             <div class="agent-item-info">
                 <div class="agent-item-name">${escapeHtml(agent.name)}</div>
-                <div class="agent-item-task">${escapeHtml(agent.task)}</div>
             </div>
             <button class="agent-action-btn edit" onclick="event.stopPropagation(); openAgentEditModal('${agent.id}')" title="编辑提示词" aria-label="编辑智能体">✏</button>
         `;
@@ -373,30 +372,8 @@ async function saveAgentEdit() {
 }
 
 function toggleMyAgents() {
-    const section = document.getElementById('myAgentsSection');
-    const isCollapsed = section.classList.contains('collapsed');
-    section.classList.toggle('collapsed');
-
-    // 当折叠（收起）智能体列表时 → 退出当前智能体，切回普通agent模式
-    if (!isCollapsed && currentAgentId) {
-        currentAgentId = null;
-        agentKbUploadMode = false;
-        document.getElementById('kbUploadToggle').classList.remove('active');
-        document.getElementById('agentKbBar').style.display = 'none';
-        updateKbUploadVisibility();
-
-        // 更新标题
-        document.getElementById('chatTitle').textContent = currentMode === 'chat' ? 'Chat' : 'XF模具智能体平台';
-
-        // 刷新智能体列表（去掉active高亮）
-        renderMyAgents();
-
-        // 切回普通agent模式的对话历史
-        if (currentMode === 'agent') {
-            renderChatList();
-            restoreModeChat();
-        }
-    }
+    // No longer a collapsible section - agents are always visible in sidebar
+    // This function kept for compatibility but does nothing
 }
 
 // ===== Agent KB Upload Toggle =====
