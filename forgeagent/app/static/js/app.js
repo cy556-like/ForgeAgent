@@ -265,6 +265,13 @@ function deleteAgent(agentId) {
         .then(data => console.log('[KB删除]', data))
         .catch(e => console.warn('[KB删除失败]', e));
     
+    // 删除该智能体关联的服务端会话
+    const agentChats = allChats.filter(c => c.agent_id === agentId);
+    agentChats.forEach(chat => {
+        fetch(`/api/v1/chats/${encodeURIComponent(chat.chat_id)}?username=${encodeURIComponent(currentUser)}`, { method: 'DELETE', headers: apiHeaders() })
+            .catch(e => console.warn('[删除智能体会话失败]', e));
+    });
+    
     myAgents = myAgents.filter(a => a.id !== agentId);
     saveAgents();
     
@@ -303,15 +310,22 @@ async function switchToAgent(agentId) {
 
     // Render agents list
     renderMyAgents();
-    
-    // Load or create chat for this agent
-    if (agent.chat_ids && agent.chat_ids.length > 0) {
+
+    // Ensure allChats is populated before filtering
+    if (!allChats || allChats.length === 0) {
+        await loadChatList();
+    }
+
+    // Find chats belonging to this agent via server-side agent_id
+    const agentChats = allChats.filter(c => c.agent_id === agentId);
+
+    if (agentChats.length > 0) {
         // Try to restore last active chat for this agent
         const lastChatId = agentActiveChatId[agentId];
-        if (lastChatId && agent.chat_ids.includes(lastChatId)) {
+        if (lastChatId && agentChats.some(c => c.chat_id === lastChatId)) {
             currentChatId = lastChatId;
         } else {
-            currentChatId = agent.chat_ids[0];
+            currentChatId = agentChats[0].chat_id;
             agentActiveChatId[agentId] = currentChatId;
             saveAgentActiveChatIds();
         }
@@ -598,21 +612,17 @@ function getModeChats() {
     if (currentMode === 'chat') {
         return allChats.filter(chat => chat.mode === 'chat');
     }
-    // Agent mode with specific agent: show that agent's chats
+    // Agent mode with specific agent: show chats where chat.agent_id matches
     if (currentMode === 'agent' && currentAgentId) {
-        const agent = myAgents.find(a => a.id === currentAgentId);
-        if (agent && agent.chat_ids) {
-            return allChats.filter(chat => agent.chat_ids.includes(chat.chat_id));
-        }
-        return [];
+        return allChats.filter(chat => chat.agent_id === currentAgentId);
     }
-    // Agent mode but no specific agent: show agent-mode chats not belonging to any agent
+    // Agent mode but no specific agent: show agent-mode chats without agent_id
     if (currentMode === 'agent' && !currentAgentId) {
         return allChats.filter(chat => {
             const modeMatch = chat.mode === 'agent' || (!chat.mode && currentMode === 'agent');
             if (!modeMatch) return false;
-            const belongsToAnyAgent = myAgents.some(a => a.chat_ids && a.chat_ids.includes(chat.chat_id));
-            return !belongsToAnyAgent;
+            // Show chats that have no agent_id (not associated with any agent)
+            return !chat.agent_id;
         });
     }
     return [];
@@ -843,7 +853,7 @@ async function doLogin() {
                 document.body.classList.add('body-chat-mode');
                 document.getElementById('sidebarUsername').textContent = username;
                 document.getElementById('sidebarAvatar').textContent = username[0].toUpperCase();
-                loadChatList();
+                await loadChatList();
                 loadModels();
                 await syncAgentsFromServer();
                 await rebuildChatIdsFromServer();
@@ -895,7 +905,7 @@ async function tryAutoLogin() {
             document.body.classList.add('body-chat-mode');
             document.getElementById('sidebarUsername').textContent = data.username;
             document.getElementById('sidebarAvatar').textContent = data.username[0].toUpperCase();
-            loadChatList();
+            await loadChatList();
             loadModels();
             await syncAgentsFromServer();
             await rebuildChatIdsFromServer();
