@@ -485,7 +485,9 @@ async def list_documents(
     end = start + page_size
     paginated = docs[start:end]
     return {
+        "status": "success",
         "documents": paginated,
+        "total": total,
         "count": total,
         "page": page,
         "page_size": page_size,
