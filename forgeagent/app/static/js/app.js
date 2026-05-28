@@ -163,7 +163,7 @@ async function syncAgentsFromServer() {
 
         // Rebuild chat_ids from server data
         await rebuildChatIdsFromServer();
-        renderAgentList();
+        renderMyAgents();
     } catch (e) {
         console.warn('[智能体同步失败]', e);
     }
@@ -1938,6 +1938,40 @@ document.addEventListener('DOMContentLoaded', async function() {
                 }
             }
         });
+    });
+
+    // Sync agents when tab becomes visible (cross-browser prompt sync)
+    document.addEventListener('visibilitychange', async function() {
+        if (!document.hidden && currentUser && authToken) {
+            try {
+                const resp = await fetch('/api/v1/agents/sync', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
+                    body: JSON.stringify({ agents: myAgents.map(a => ({ id: a.id, name: a.name, task: a.task, mode: a.mode, created_at: a.created_at, updated_at: a.updated_at })) })
+                });
+                const data = await resp.json();
+                if (data.success && data.agents) {
+                    const localAgents = JSON.parse(localStorage.getItem('forgeAgents') || '[]');
+                    const localMap = {};
+                    localAgents.forEach(a => { localMap[a.id] = a; });
+                    const mergedAgents = data.agents.map(serverAgent => {
+                        const local = localMap[serverAgent.id];
+                        if (!local) return { ...serverAgent, chat_ids: [] };
+                        const useServer = _resolveMergeDirection(local, serverAgent);
+                        return {
+                            ...serverAgent,
+                            name: useServer ? serverAgent.name : (local.name || serverAgent.name),
+                            task: useServer ? serverAgent.task : (local.task || serverAgent.task),
+                            updated_at: useServer ? (serverAgent.updated_at || null) : (local.updated_at || null),
+                            chat_ids: local.chat_ids || []
+                        };
+                    });
+                    myAgents = filterAgents(mergedAgents);
+                    localStorage.setItem('forgeAgents', JSON.stringify(myAgents));
+                    renderMyAgents();
+                }
+            } catch (e) { console.warn('[Tab sync failed]', e); }
+        }
     });
 
     // Landing page: scroll-reveal animation with IntersectionObserver
