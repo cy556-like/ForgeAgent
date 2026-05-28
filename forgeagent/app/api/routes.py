@@ -684,13 +684,19 @@ async def delete_history(session_id: str):
 
 @router.get("/chats", summary="获取用户会话列表")
 async def get_chats(
-    username: str,
+    username: str = Query(None, description="用户名（兼容旧版，优先使用JWT）"),
     mode: str = Query(None, description="模式过滤: agent/chat"),
+    agent_id: str = Query(None, description="智能体ID过滤"),
     page: int = Query(1, ge=1, description="页码"),          # [#23] 分页
     page_size: int = Query(20, ge=1, le=100, description="每页数量"),
+    auth_user: str = Depends(get_current_user),
 ):
-    """获取用户的会话列表（支持分页，支持按模式过滤）"""
-    chats = list_chats(username, mode=mode)
+    """获取用户的会话列表（支持分页，支持按模式和智能体过滤）"""
+    # 优先使用JWT认证的用户名，兼容旧版查询参数
+    effective_user = auth_user or username
+    if not effective_user:
+        raise HTTPException(status_code=401, detail="未认证，请重新登录")
+    chats = list_chats(effective_user, mode=mode, agent_id=agent_id)
     total = len(chats)
     start = (page - 1) * page_size
     end = start + page_size
@@ -705,24 +711,44 @@ async def get_chats(
 
 
 @router.post("/chats", summary="创建新会话")
-async def create_chat_api(username: str, title: str = "新对话", mode: str = "agent"):
-    """为用户创建一个新的会话（支持指定模式）"""
-    chat_info = create_chat(username, title, mode=mode)
+async def create_chat_api(
+    title: str = "新对话",
+    mode: str = "agent",
+    agent_id: str = Query(None, description="智能体ID，用于关联对话与智能体"),
+    username: str = Query(None, description="用户名（兼容旧版，优先使用JWT）"),
+    auth_user: str = Depends(get_current_user),
+):
+    """为用户创建一个新的会话（支持指定模式和关联智能体）"""
+    effective_user = auth_user or username
+    if not effective_user:
+        raise HTTPException(status_code=401, detail="未认证，请重新登录")
+    chat_info = create_chat(effective_user, title, mode=mode, agent_id=agent_id)
     record_session()
     return {"success": True, "chat": chat_info}
 
 
 @router.delete("/chats/{chat_id}", summary="删除会话")
-async def delete_chat_api(chat_id: str, username: str):
+async def delete_chat_api(
+    chat_id: str,
+    username: str = Query(None, description="用户名（兼容旧版，优先使用JWT）"),
+    auth_user: str = Depends(get_current_user),
+):
     """删除用户的某个会话"""
-    delete_chat(username, chat_id)
+    effective_user = auth_user or username
+    if not effective_user:
+        raise HTTPException(status_code=401, detail="未认证，请重新登录")
+    delete_chat(effective_user, chat_id)
     return {"success": True, "message": "会话已删除"}
 
 
 @router.put("/chats/{chat_id}/rename", summary="重命名会话")
-async def rename_chat_api(chat_id: str, req: RenameRequest):
+async def rename_chat_api(chat_id: str, req: RenameRequest, auth_user: str = Depends(get_current_user)):
     """重命名用户的某个会话"""
-    rename_chat(req.username, req.chat_id, req.new_title)
+    # 优先使用JWT认证的用户名
+    effective_user = auth_user or req.username
+    if not effective_user:
+        raise HTTPException(status_code=401, detail="未认证，请重新登录")
+    rename_chat(effective_user, req.chat_id, req.new_title)
     return {"success": True, "message": "会话已重命名"}
 
 
