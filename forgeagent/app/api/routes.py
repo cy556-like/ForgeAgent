@@ -18,7 +18,7 @@ import base64
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends, Request, Query
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends, Request, Query, Header
 from fastapi.responses import StreamingResponse, Response
 from pydantic import BaseModel
 
