@@ -360,8 +360,13 @@ async def chat_with_file_stream(
         )
 
     elif ext in doc_exts:
-        # 文档文件
-        file_path = os.path.join(settings.DOCUMENTS_DIR, file.filename)
+        # 文档文件 - 使用per-agent子目录实现文件隔离
+        if agent_id:
+            agent_dir = os.path.join(settings.DOCUMENTS_DIR, f"agent_{agent_id}")
+            os.makedirs(agent_dir, exist_ok=True)
+            file_path = os.path.join(agent_dir, file.filename)
+        else:
+            file_path = os.path.join(settings.DOCUMENTS_DIR, file.filename)
         with open(file_path, "wb") as f:
             shutil.copyfileobj(file.file, f)
         
@@ -449,8 +454,13 @@ async def upload_document(file: UploadFile = File(...), agent_id: str = Form(Non
 
     logger.info(f"知识库上传文档: {file.filename}, 大小: {len(file_content_raw)} bytes")
 
-    # 保存文件
-    file_path = os.path.join(settings.DOCUMENTS_DIR, file.filename)
+    # 保存文件 - 使用per-agent子目录实现文件隔离
+    if agent_id:
+        agent_dir = os.path.join(settings.DOCUMENTS_DIR, f"agent_{agent_id}")
+        os.makedirs(agent_dir, exist_ok=True)
+        file_path = os.path.join(agent_dir, file.filename)
+    else:
+        file_path = os.path.join(settings.DOCUMENTS_DIR, file.filename)
     with open(file_path, "wb") as f:
         shutil.copyfileobj(file.file, f)
 
@@ -480,7 +490,7 @@ async def list_documents(
     """获取知识库中所有文档列表（支持分页，按智能体隔离）"""
     docs = list_indexed_documents(agent_id=agent_id)
 
-    # BUG FIX: Filesystem fallback - scan DOCUMENTS_DIR for files not in ChromaDB
+    # BUG FIX: Filesystem fallback - scan per-agent subdirectory for files not in ChromaDB
     # When ChromaDB has no records (e.g. embedding unavailable), files on disk should still appear
     doc_extensions = {'.pdf', '.txt', '.docx', '.csv', '.xlsx', '.xls', '.doc', '.ppt', '.pptx', '.md', '.py', '.js', '.html', '.css', '.json'}
     chromadb_filenames = set()
@@ -490,11 +500,17 @@ async def list_documents(
         elif isinstance(doc, str):
             chromadb_filenames.add(doc)
 
-    if os.path.exists(settings.DOCUMENTS_DIR):
-        for fname in os.listdir(settings.DOCUMENTS_DIR):
+    # Scan the appropriate directory based on agent_id
+    if agent_id:
+        scan_dir = os.path.join(settings.DOCUMENTS_DIR, f"agent_{agent_id}")
+    else:
+        scan_dir = settings.DOCUMENTS_DIR
+
+    if os.path.exists(scan_dir):
+        for fname in os.listdir(scan_dir):
             ext = os.path.splitext(fname)[1].lower()
             if ext in doc_extensions and fname not in chromadb_filenames:
-                file_path = os.path.join(settings.DOCUMENTS_DIR, fname)
+                file_path = os.path.join(scan_dir, fname)
                 if os.path.isfile(file_path):
                     try:
                         file_stat = os.stat(file_path)
@@ -582,14 +598,23 @@ async def modify_document_api(filename: str, req: ModifyDocumentRequest):
 
 
 @router.get("/documents/{filename}/download", summary="下载知识库文档")
-async def download_document(filename: str):
+async def download_document(filename: str, agent_id: str = Query(None, description="智能体ID，为空时查全局知识库")):
     """
     下载知识库中的文档文件
     支持 .docx / .txt / .pdf 格式
     """
-    file_path = os.path.join(settings.DOCUMENTS_DIR, filename)
+    # Search in per-agent subdirectory first, then fall back to global dir
+    if agent_id:
+        file_path = os.path.join(settings.DOCUMENTS_DIR, f"agent_{agent_id}", filename)
+    else:
+        file_path = os.path.join(settings.DOCUMENTS_DIR, filename)
     if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail=f"文档 {filename} 不存在")
+        # Fallback: try global dir if agent-specific path not found
+        fallback_path = os.path.join(settings.DOCUMENTS_DIR, filename)
+        if os.path.exists(fallback_path):
+            file_path = fallback_path
+        else:
+            raise HTTPException(status_code=404, detail=f"文档 {filename} 不存在")
 
     ext = os.path.splitext(filename)[1].lower()
     mime_map = {
