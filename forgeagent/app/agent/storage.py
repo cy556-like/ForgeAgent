@@ -98,14 +98,33 @@ def sync_agents(username: str, client_agents: list) -> dict:
         client_agent = client_map.get(aid)
         
         if server_agent and client_agent:
-            # 两端都有：取较新的
-            server_time = server_agent.get("updated_at") or server_agent.get("created_at", 0)
-            client_time = client_agent.get("updated_at") or client_agent.get("created_at", 0)
-            if client_time > server_time:
+            # 两端都有：比较 updated_at，有 updated_at 的一方优先
+            server_updated = server_agent.get("updated_at")
+            client_updated = client_agent.get("updated_at")
+            
+            if server_updated and not client_updated:
+                # Server was edited, use server version
+                merged.append(server_agent)
+            elif client_updated and not server_updated:
+                # Client was edited, use client version
                 merged.append(client_agent)
                 updated += 1
+            elif server_updated and client_updated:
+                # Both edited, use the newer one
+                if server_updated > client_updated:
+                    merged.append(server_agent)
+                else:
+                    merged.append(client_agent)
+                    updated += 1
             else:
-                merged.append(server_agent)
+                # Neither was edited after creation, use the newer created_at
+                server_created = server_agent.get("created_at", 0)
+                client_created = client_agent.get("created_at", 0)
+                if server_created >= client_created:
+                    merged.append(server_agent)
+                else:
+                    merged.append(client_agent)
+                    updated += 1
             synced += 1
         elif client_agent:
             # 仅客户端有：添加
