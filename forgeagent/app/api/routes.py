@@ -507,6 +507,15 @@ async def list_documents(
                     except OSError:
                         pass
 
+    # Normalize all docs to plain filename strings for frontend compatibility
+    normalized_docs = []
+    for doc in docs:
+        if isinstance(doc, dict):
+            normalized_docs.append(doc.get('filename', doc.get('name', str(doc))))
+        else:
+            normalized_docs.append(str(doc))
+    docs = normalized_docs
+
     total = len(docs)
     # 分页
     start = (page - 1) * page_size
