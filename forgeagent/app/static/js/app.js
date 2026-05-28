@@ -42,7 +42,7 @@ function forceCorrectAgents() {
             task: ex ? (ex.task || def.task) : def.task,
             mode: 'agent',
             icon: id === 'xf-rd-agent' ? '🔧' : '✅',
-            created_at: ex ? (ex.created_at || Date.now() / 1000) : Date.now() / 1000,
+            created_at: ex ? (ex.created_at || 0) : 0,
             updated_at: ex ? (ex.updated_at || null) : null,
             chat_ids: ex ? (ex.chat_ids || []) : []
         };
@@ -68,6 +68,18 @@ let myAgents = filterAgents(JSON.parse(localStorage.getItem('forgeAgents') || 'n
 let currentAgentId = null;
 let agentKbUploadMode = false;
 
+function _resolveMergeDirection(local, serverAgent) {
+    // BUG FIX: Improved timestamp-based merge logic for prompt sync across browsers
+    // If server has updated_at but local doesn't, prefer server data
+    if (serverAgent.updated_at && !local.updated_at) return true;
+    // If local has updated_at but server doesn't, prefer local data
+    if (local.updated_at && !serverAgent.updated_at) return false;
+    // Otherwise compare timestamps
+    const localTime = local.updated_at || local.created_at || 0;
+    const serverTime = serverAgent.updated_at || serverAgent.created_at || 0;
+    return serverTime > localTime;
+}
+
 async function saveAgents() {
     // 过滤：只保留允许的智能体
     myAgents = filterAgents(myAgents);
@@ -92,10 +104,7 @@ async function saveAgents() {
                 const mergedAgents = data.agents.map(serverAgent => {
                     const local = localMap[serverAgent.id];
                     if (!local) return { ...serverAgent, chat_ids: [] };
-                    // Compare timestamps: if server is newer, use server's name/task; if local is newer, use local's
-                    const localTime = local.updated_at || local.created_at || 0;
-                    const serverTime = serverAgent.updated_at || serverAgent.created_at || 0;
-                    const useServer = serverTime > localTime;
+                    const useServer = _resolveMergeDirection(local, serverAgent);
                     return {
                         ...serverAgent,
                         name: useServer ? serverAgent.name : (local.name || serverAgent.name),
@@ -137,10 +146,7 @@ async function syncAgentsFromServer() {
             const mergedAgents = data.agents.map(serverAgent => {
                 const local = localMap[serverAgent.id];
                 if (!local) return { ...serverAgent, chat_ids: [] };
-                // Compare timestamps: if server is newer, use server's name/task; if local is newer, use local's
-                const localTime = local.updated_at || local.created_at || 0;
-                const serverTime = serverAgent.updated_at || serverAgent.created_at || 0;
-                const useServer = serverTime > localTime;
+                const useServer = _resolveMergeDirection(local, serverAgent);
                 return {
                     ...serverAgent,
                     name: useServer ? serverAgent.name : (local.name || serverAgent.name),
@@ -153,10 +159,40 @@ async function syncAgentsFromServer() {
             localStorage.setItem('forgeAgents', JSON.stringify(myAgents));
             console.log(`[智能体同步] 成功: 共${data.total}个, 新增${data.added}, 更新${data.updated}`);
         }
+
+        // BUG FIX: Rebuild chat_ids from server data to restore agent-chat associations
+        await rebuildChatIdsFromServer();
     } catch (e) {
         console.warn('[智能体同步失败]', e);
     }
 }
+// BUG FIX: Rebuild agent.chat_ids from server chat data to restore agent-chat associations
+// after refresh/cross-browser where local chat_ids are lost
+async function rebuildChatIdsFromServer() {
+    if (!currentUser || !authToken) return;
+    try {
+        const resp = await fetch(`/api/v1/chats?username=${encodeURIComponent(currentUser)}`, { headers: apiHeaders() });
+        const data = await resp.json();
+        if (data.success && data.chats) {
+            const serverChats = data.chats;
+            myAgents.forEach(agent => {
+                // Find all chats where chat.agent_id matches this agent's id
+                const matchingChatIds = serverChats
+                    .filter(chat => chat.agent_id === agent.id)
+                    .map(chat => chat.chat_id);
+                // Merge: add any new server chat_ids, don't remove local-only ones
+                const existingIds = new Set(agent.chat_ids || []);
+                matchingChatIds.forEach(id => existingIds.add(id));
+                agent.chat_ids = Array.from(existingIds);
+            });
+            localStorage.setItem('forgeAgents', JSON.stringify(myAgents));
+            console.log('[rebuildChatIds] Rebuilt chat_ids from server for all agents');
+        }
+    } catch (e) {
+        console.warn('[rebuildChatIds失败]', e);
+    }
+}
+
 function generateAgentId() {
     return 'agent_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 6);
 }
@@ -792,6 +828,7 @@ async function doLogin() {
                 loadChatList();
                 loadModels();
                 await syncAgentsFromServer();
+                await rebuildChatIdsFromServer();
                 renderMyAgents();
                 updateKbUploadVisibility();
             }, 500);
@@ -841,6 +878,7 @@ async function tryAutoLogin() {
             loadChatList();
             loadModels();
             await syncAgentsFromServer();
+            await rebuildChatIdsFromServer();
             renderMyAgents();
             updateKbUploadVisibility();
             return true;
