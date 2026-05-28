@@ -23,8 +23,7 @@ from fastapi.responses import StreamingResponse, Response
 from pydantic import BaseModel
 
 from app.agent.core import chat, chat_stream_generator, chat_stream_generator_multimodal, reset_agent
-from app.agent.storage import sync_agents as sync_agents_storage, load_agents, debug_info as agent_debug_info
-from app.rag.document import index_document, search_documents, list_indexed_documents, delete_document, update_document, delete_agent_collection, list_all_collections, load_document, export_document_as_docx, reindex_all_documents
+from app.rag.document import index_document, search_documents, list_indexed_documents, delete_document, update_document, delete_agent_collection, list_all_collections, load_document, export_document_as_docx, reindex_all_documents, get_indexing_mode
 from app.auth.user_manager import login_user, register_user
 from app.auth.jwt_handler import create_token, verify_token, get_username_from_token
 from app.memory.manager import (
@@ -171,11 +170,6 @@ class ExportDocumentRequest(BaseModel):
     content: str  # 文档内容（纯文本）
     filename: str = ""  # 输出文件名（含扩展名），为空则自动生成
     title: str = ""  # 文档标题，为空则使用filename
-
-class AgentSyncRequest(BaseModel):
-    """智能体同步请求"""
-    agents: list  # 智能体列表
-
 
 
 # ===== 认证接口 =====
@@ -369,14 +363,14 @@ async def chat_with_file_stream(
             file_path = os.path.join(settings.DOCUMENTS_DIR, file.filename)
         with open(file_path, "wb") as f:
             shutil.copyfileobj(file.file, f)
-        
+
         if store_to_kb == "true":
-            # 知识库模式 ON：索引到知识库后回答
+            # 知识库模式 ON：索引到知识库后回答（[#11] 自动降级为关键词模式）
             try:
-                # 空字符串转为 None
                 aid = agent_id if agent_id else None
                 index_result = index_document(file_path, file.filename, agent_id=aid)
-                print(f"[DEBUG-上传] 文件已索引到知识库: {file.filename}, agent_id={aid}, 分块数={index_result.get('chunks', 0)}")
+                mode = index_result.get('indexing_mode', 'unknown')
+                print(f"[DEBUG-上传] 文件已索引到知识库: {file.filename}, agent_id={aid}, 分块数={index_result.get('chunks', 0)}, 模式={mode}")
             except Exception as e:
                 os.remove(file_path)
                 raise HTTPException(status_code=500, detail=f"文档索引失败: {str(e)}")
@@ -464,9 +458,11 @@ async def upload_document(file: UploadFile = File(...), agent_id: str = Form(Non
     with open(file_path, "wb") as f:
         shutil.copyfileobj(file.file, f)
 
-    # 索引文档
+    # 索引文档（[#11] 自动降级：embedding不可用时切换为关键词索引）
     try:
         result = index_document(file_path, file.filename, agent_id=agent_id)
+        mode = result.get('indexing_mode', 'unknown')
+        logger.info(f"文档索引完成: {file.filename}, agent_id={agent_id}, 分块数={result.get('chunks', 0)}, 模式={mode}")
         return {"status": "success", "detail": result}
     except Exception as e:
         # 索引失败则删除文件
@@ -487,20 +483,22 @@ async def list_documents(
     page_size: int = Query(20, ge=1, le=100, description="每页数量"),
     agent_id: str = Query(None, description="智能体ID，为空时查全局知识库"),
 ):
-    """获取知识库中所有文档列表（支持分页，按智能体隔离）"""
+    """获取知识库中所有文档列表（支持分页，按智能体隔离）
+
+    [#11] 同时扫描关键词索引和磁盘文件，确保关键词模式下也能正确列出文档
+    """
     docs = list_indexed_documents(agent_id=agent_id)
 
-    # BUG FIX: Filesystem fallback - scan per-agent subdirectory for files not in ChromaDB
-    # When ChromaDB has no records (e.g. embedding unavailable), files on disk should still appear
+    # [#11] 文件系统兜底：当索引中没有记录时，扫描磁盘文件
     doc_extensions = {'.pdf', '.txt', '.docx', '.csv', '.xlsx', '.xls', '.doc', '.ppt', '.pptx', '.md', '.py', '.js', '.html', '.css', '.json'}
-    chromadb_filenames = set()
+    indexed_filenames = set()
     for doc in docs:
         if isinstance(doc, dict) and doc.get('filename'):
-            chromadb_filenames.add(doc['filename'])
+            indexed_filenames.add(doc['filename'])
         elif isinstance(doc, str):
-            chromadb_filenames.add(doc)
+            indexed_filenames.add(doc)
 
-    # Scan the appropriate directory based on agent_id
+    # 扫描对应的目录
     if agent_id:
         scan_dir = os.path.join(settings.DOCUMENTS_DIR, f"agent_{agent_id}")
     else:
@@ -509,21 +507,12 @@ async def list_documents(
     if os.path.exists(scan_dir):
         for fname in os.listdir(scan_dir):
             ext = os.path.splitext(fname)[1].lower()
-            if ext in doc_extensions and fname not in chromadb_filenames:
+            if ext in doc_extensions and fname not in indexed_filenames:
                 file_path = os.path.join(scan_dir, fname)
                 if os.path.isfile(file_path):
-                    try:
-                        file_stat = os.stat(file_path)
-                        docs.append({
-                            'filename': fname,
-                            'source': 'filesystem',
-                            'size': file_stat.st_size,
-                            'modified': file_stat.st_mtime,
-                        })
-                    except OSError:
-                        pass
+                    docs.append(fname)
 
-    # Normalize all docs to plain filename strings for frontend compatibility
+    # 统一格式为纯文件名字符串（前端兼容）
     normalized_docs = []
     for doc in docs:
         if isinstance(doc, dict):
@@ -538,10 +527,9 @@ async def list_documents(
     end = start + page_size
     paginated = docs[start:end]
     return {
-        "status": "success",
         "documents": paginated,
-        "total": total,
         "count": total,
+        "total": total,
         "page": page,
         "page_size": page_size,
         "total_pages": (total + page_size - 1) // page_size,
@@ -603,13 +591,13 @@ async def download_document(filename: str, agent_id: str = Query(None, descripti
     下载知识库中的文档文件
     支持 .docx / .txt / .pdf 格式
     """
-    # Search in per-agent subdirectory first, then fall back to global dir
+    # 先查找agent子目录，再查全局目录
     if agent_id:
         file_path = os.path.join(settings.DOCUMENTS_DIR, f"agent_{agent_id}", filename)
     else:
         file_path = os.path.join(settings.DOCUMENTS_DIR, filename)
     if not os.path.exists(file_path):
-        # Fallback: try global dir if agent-specific path not found
+        # 回退：尝试全局目录
         fallback_path = os.path.join(settings.DOCUMENTS_DIR, filename)
         if os.path.exists(fallback_path):
             file_path = fallback_path
@@ -716,9 +704,9 @@ async def get_chats(
 
 
 @router.post("/chats", summary="创建新会话")
-async def create_chat_api(username: str, title: str = "新对话", mode: str = "agent", agent_id: str = None):
-    """为用户创建一个新的会话（支持指定模式和智能体关联）"""
-    chat_info = create_chat(username, title, mode=mode, agent_id=agent_id)
+async def create_chat_api(username: str, title: str = "新对话", mode: str = "agent"):
+    """为用户创建一个新的会话（支持指定模式）"""
+    chat_info = create_chat(username, title, mode=mode)
     record_session()
     return {"success": True, "chat": chat_info}
 
@@ -895,16 +883,24 @@ async def health_detailed():
     checks = {}
     overall = "healthy"
     
-    # 1. ChromaDB 检查
-    try:
-        from app.rag.document import get_vector_store
-        vs = get_vector_store()
-        collection = vs._collection
-        count = collection.count()
-        checks["chromadb"] = {"status": "ok", "document_count": count}
-    except Exception as e:
-        checks["chromadb"] = {"status": "error", "message": str(e)[:200]}
-        overall = "degraded"
+    # 1. ChromaDB / 索引模式 检查
+    indexing_mode = get_indexing_mode()
+    if indexing_mode == "vector":
+        try:
+            from app.rag.document import get_vector_store
+            vs = get_vector_store()
+            if vs is not None:
+                collection = vs._collection
+                count = collection.count()
+                checks["chromadb"] = {"status": "ok", "document_count": count, "indexing_mode": "vector"}
+            else:
+                checks["chromadb"] = {"status": "degraded", "indexing_mode": "keyword", "message": "Embedding 不可用，已自动降级为关键词搜索"}
+        except Exception as e:
+            checks["chromadb"] = {"status": "degraded", "indexing_mode": "keyword", "message": str(e)[:200]}
+    elif indexing_mode == "keyword":
+        checks["chromadb"] = {"status": "degraded", "indexing_mode": "keyword", "message": "Embedding API 不可用，已自动降级为关键词搜索模式"}
+    else:
+        checks["chromadb"] = {"status": "ok", "indexing_mode": "unknown", "message": "尚未检测 Embedding 可用性"}
     
     # 2. LLM API 检查
     try:
@@ -954,8 +950,13 @@ async def health_detailed():
         "python_version": platform.python_version(),
         "platform": platform.system(),
         "version": "4.0.0",
+        "indexing_mode": indexing_mode,
     }
-    
+
+    # 关键词模式下整体状态为 degraded（功能可用但非最佳）
+    if indexing_mode == "keyword" and overall == "healthy":
+        overall = "degraded"
+
     return {
         "status": overall,
         "checks": checks,
@@ -986,80 +987,6 @@ async def debug_collections():
     """诊断接口：列出所有 ChromaDB collection 及其文档数"""
     collections = list_all_collections()
     return {"collections": collections}
-
-
-
-
-
-# ===== 智能体同步接口 =====
-
-@router.post("/agents/sync", summary="同步智能体数据（跨浏览器/设备同步）")
-async def sync_agents_api(
-    req: AgentSyncRequest,
-    username: str = Depends(require_auth),
-):
-    """
-    同步智能体数据：
-    - 客户端上传本地智能体列表
-    - 服务端按 agent_id 合并（不覆盖，取较新版本）
-    - 返回合并后的完整列表
-    
-    解决跨浏览器/设备智能体数据不一致问题
-    """
-    if not username:
-        raise HTTPException(status_code=401, detail="未认证，请重新登录")
-    
-    try:
-        result = sync_agents_storage(username, req.agents)
-        # 过滤：只保留允许的智能体ID
-        allowed_ids = {'xf-rd-agent', 'xf-quality-agent'}
-        filtered_agents = [a for a in result["agents"] if a.get("id") in allowed_ids]
-        return {
-            "success": True,
-            "agents": filtered_agents,
-            "synced": result["synced"],
-            "added": result["added"],
-            "updated": result["updated"],
-            "total": len(filtered_agents),
-        }
-    except Exception as e:
-        logger.error(f"智能体同步失败 [{username}]: {e}")
-        raise HTTPException(status_code=500, detail=f"同步失败: {str(e)}")
-
-
-@router.get("/agents", summary="获取用户的智能体列表")
-async def get_agents(username: str = Depends(require_auth)):
-    """
-    获取当前用户的所有智能体
-    """
-    if not username:
-        raise HTTPException(status_code=401, detail="未认证，请重新登录")
-    
-    agents = load_agents(username)
-    # 过滤：只保留允许的智能体ID
-    allowed_ids = {'xf-rd-agent', 'xf-quality-agent'}
-    agents = [a for a in agents if a.get("id") in allowed_ids]
-    return {
-        "success": True,
-        "agents": agents,
-        "total": len(agents),
-    }
-
-
-@router.get("/agents/debug", summary="智能体数据诊断")
-async def agents_debug(username: str = Depends(require_auth)):
-    """
-    诊断接口：返回用户智能体数据的详细信息
-    用于排查跨浏览器同步问题
-    """
-    if not username:
-        raise HTTPException(status_code=401, detail="未认证，请重新登录")
-    
-    info = agent_debug_info(username)
-    return {
-        "success": True,
-        "debug": info,
-    }
 
 
 @router.post("/reindex", summary="重建知识库索引（切换embedding模型后使用）")
