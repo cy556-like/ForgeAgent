@@ -3269,13 +3269,48 @@ html { scroll-behavior: smooth; }
     transform: translateY(-1px);
 }
 
-/* ===== KB Upload Button in Toolbar ===== */
-.kb-upload-btn {
-    position: relative;
+/* ===== KB Upload Toggle in Toolbar ===== */
+.kb-upload-toggle {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 12px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    user-select: none;
 }
-.kb-upload-btn.active {
-    color: #2563EB;
+.kb-upload-toggle:hover {
+    border-color: #ccc;
+    color: var(--text-primary);
+    background: var(--bg-secondary);
+}
+.kb-upload-toggle.active {
+    border-color: #2563eb;
+    color: #2563eb;
     background: rgba(37, 99, 235, 0.06);
+}
+.kb-upload-toggle.active:hover {
+    background: rgba(37, 99, 235, 0.1);
+}
+[data-theme="dark"] .kb-upload-toggle.active {
+    border-color: #60a5fa;
+    color: #60a5fa;
+    background: rgba(96, 165, 250, 0.08);
+}
+[data-theme="dark"] .kb-upload-toggle.active:hover {
+    background: rgba(96, 165, 250, 0.12);
+}
+.kb-upload-toggle .toggle-icon {
+    font-size: 13px;
+}
+.kb-upload-toggle .toggle-label {
+    font-weight: 500;
 }
 
 /* ===== Agent KB Bar ===== */
